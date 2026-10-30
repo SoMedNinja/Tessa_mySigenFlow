@@ -1,0 +1,38 @@
+id: tessa_my_sigen_flow
+version: 0.1.0
+api: "0.15"
+icon: solar-power
+maintainer: SoMedNinja
+license: MIT
+stage: beta
+topics: [energy]
+requires:
+  esphome: 2026.6.2
+  psram: true
+boards: any
+flash_kb: 24
+
+permissions:
+  ha_commands: [recorder/statistics_during_period]
+
+answers:
+  - command: recorder/statistics_during_period
+    fields:
+      timestamps: { path: "$.statistics.*[*].start", as: numbers }
+      values: { path: "$.statistics.*[*].mean", as: numbers }
+
+tiles:
+  - id: today
+    name: tile_today
+    icon: solar-power
+    sizes: { min: 3x2, max: 3x2 }
+    memory: 12000
+    domains: [sensor]
+    attributes: [unit_of_measurement]
+    example: tile_example
+    options:
+      - { id: solar, kind: entity, label: solar, hint: solar_hint }
+      - { id: battery, kind: entity, label: battery, hint: battery_hint }
+      - { id: grid, kind: entity, label: grid, hint: grid_hint }
+      - { id: home, kind: entity, label: home, hint: home_hint }
+      - { id: car, kind: entity, label: car, hint: car_hint }
