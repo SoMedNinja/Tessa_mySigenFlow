@@ -11,8 +11,8 @@ class SigenFlow : public Component, public tessera::Plugin {
   void setup() override;
   float get_setup_priority() const override { return setup_priority::DATA; }
   void on_message(JsonObjectConst message) override;
-  void configure(const char *const entities[5], uint32_t epoch);
-  void update_current(JsonObjectConst data);
+  void configure(uint32_t epoch);
+  void update_sensor(uint8_t series, float value, const char *const entities[5], uint32_t epoch);
   bool sample(uint32_t epoch);
   const FlowData &data() const;
 
