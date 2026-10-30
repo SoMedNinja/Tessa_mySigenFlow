@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Fix recorder statistics answer paths for Tessera field-path syntax.
+
 ## 0.1.1
 
 - Use screen-level sensor inputs for compatibility with Tessera validators that predate per-tile entity options.
