@@ -1,2 +1,50 @@
-# The 3×2 dashboard tile and its five sensors are configured in the Tessera tile inspector.
-tessa_my_sigen_flow: {}
+# Entity inputs are screen-level settings on Tessera versions before per-tile entity options.
+tessa_my_sigen_flow:
+  id: sigen_flow
+
+sensor:
+  - platform: homeassistant
+    id: sigen_solar_power
+    entity_id: ${SOLAR_ENTITY}
+    unit_of_measurement: W
+    internal: true
+    on_value:
+      - lambda: |-
+          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          id(sigen_flow).update_sensor(0, x, entities, tessera::epoch());
+  - platform: homeassistant
+    id: sigen_battery_power
+    entity_id: ${BATTERY_ENTITY}
+    unit_of_measurement: W
+    internal: true
+    on_value:
+      - lambda: |-
+          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          id(sigen_flow).update_sensor(1, x, entities, tessera::epoch());
+  - platform: homeassistant
+    id: sigen_grid_power
+    entity_id: ${GRID_ENTITY}
+    unit_of_measurement: W
+    internal: true
+    on_value:
+      - lambda: |-
+          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          id(sigen_flow).update_sensor(2, x, entities, tessera::epoch());
+  - platform: homeassistant
+    id: sigen_home_power
+    entity_id: ${HOME_ENTITY}
+    unit_of_measurement: W
+    internal: true
+    on_value:
+      - lambda: |-
+          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          id(sigen_flow).update_sensor(3, x, entities, tessera::epoch());
+  - platform: homeassistant
+    id: sigen_car_power
+    entity_id: ${CAR_ENTITY}
+    unit_of_measurement: W
+    internal: true
+    on_value:
+      - lambda: |-
+          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          id(sigen_flow).update_sensor(4, x, entities, tessera::epoch());
