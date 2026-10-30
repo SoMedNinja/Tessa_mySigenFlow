@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
-#include <string>
 
 namespace esphome::tessa_my_sigen_flow {
 
@@ -16,7 +15,6 @@ constexpr int SERIES = 5;
 constexpr int MAX_POINTS = 300;  // 25 hours on the day clocks go back, sampled every five minutes
 constexpr uint32_t SAMPLE_SECONDS = 300;
 constexpr uint32_t CHUNK_SECONDS = 6 * 3600;
-constexpr const char *IDS[SERIES] = {"solar", "battery", "grid", "home", "car"};
 constexpr const char *LABELS[SERIES] = {"solar", "battery", "grid", "home", "car"};
 constexpr uint32_t COLORS[SERIES] = {0xF2C94C, 0x43D9D0, 0x6EA8FE, 0xB28DFF, 0xFF9F68};
 
@@ -54,17 +52,6 @@ static uint32_t local_midnight(uint32_t epoch) {
   return midnight;
 }
 
-static bool parse_number(JsonVariantConst v, float &out) {
-  if (v.is<float>() || v.is<int>()) {
-    out = v.as<float>();
-    return std::isfinite(out);
-  }
-  const char *text = v | "";
-  char *end = nullptr;
-  out = std::strtof(text, &end);
-  return end != text && *end == 0 && std::isfinite(out);
-}
-
 static float to_kw(float value, const char *unit) {
   if (std::strcmp(unit, "W") == 0 || std::strcmp(unit, "w") == 0) return value / 1000.0f;
   if (std::strcmp(unit, "MW") == 0) return value * 1000.0f;
@@ -89,14 +76,13 @@ class TodayTile;
 
 const FlowData &SigenFlow::data() const { return *flow_; }
 
-void SigenFlow::configure(const char *const entities[SERIES], uint32_t epoch) {
+void SigenFlow::configure(uint32_t epoch) {
   if (!flow_ || !epoch) return;
   const uint32_t start = local_midnight(epoch);
   const uint32_t end = local_midnight(start + 26 * 3600);
   bool same_entities = true;
-  for (int s = 0; s < SERIES; s++) same_entities = same_entities && std::strcmp(flow_->entity[s], entities[s]) == 0;
   const bool same_day = flow_->day_start == start && flow_->day_end == end;
-  if (same_entities && same_day) return;
+  if (same_day) return;
 
   flow_->day_start = start;
   flow_->day_end = end;
@@ -105,8 +91,6 @@ void SigenFlow::configure(const char *const entities[SERIES], uint32_t epoch) {
   flow_->live_slot = -1;
   for (int s = 0; s < SERIES; s++) { flow_->live_sum[s] = 0; flow_->live_count[s] = 0; }
   for (int s = 0; s < SERIES; s++) {
-    std::snprintf(flow_->entity[s], sizeof(flow_->entity[s]), "%s", entities[s]);
-    if (!same_entities) flow_->current_ok[s] = false;
     for (int i = 0; i < MAX_POINTS; i++) flow_->values[s][i] = NAN;
   }
   request_id_ = 0;
@@ -117,6 +101,30 @@ void SigenFlow::configure(const char *const entities[SERIES], uint32_t epoch) {
   history_until_ = complete_until;
   flow_->generation++;
   request_next();
+}
+
+void SigenFlow::update_sensor(uint8_t series, float value, const char *const entities[SERIES], uint32_t epoch) {
+  if (!flow_ || series >= SERIES) return;
+  bool entities_changed = false;
+  for (int s = 0; s < SERIES; s++) {
+    if (std::strcmp(flow_->entity[s], entities[s]) != 0) {
+      std::snprintf(flow_->entity[s], sizeof(flow_->entity[s]), "%s", entities[s]);
+      flow_->current_ok[s] = false;
+      entities_changed = true;
+    }
+  }
+  if (entities_changed) {
+    flow_->day_start = 0;
+    configure(epoch);
+  } else {
+    configure(epoch);
+  }
+  flow_->unit[series][0] = 'W';
+  flow_->unit[series][1] = 0;
+  flow_->current[series] = to_kw(value, flow_->unit[series]);
+  flow_->current_ok[series] = std::isfinite(flow_->current[series]);
+  flow_->name[series][0] = 0;
+  flow_->generation++;
 }
 
 void SigenFlow::request_next() {
@@ -178,32 +186,6 @@ void SigenFlow::on_message(JsonObjectConst message) {
   request_next();
 }
 
-void SigenFlow::update_current(JsonObjectConst data) {
-  if (!flow_) return;
-  JsonObjectConst entities = data["entities"];
-  bool labels_changed = false;
-  for (int s = 0; s < SERIES; s++) {
-    flow_->current_ok[s] = false;
-    if (!flow_->entity[s][0]) continue;
-    JsonObjectConst sensor = entities[IDS[s]];
-    if (sensor.isNull()) continue;
-    char unit[sizeof(flow_->unit[s])];
-    std::snprintf(unit, sizeof(unit), "%s", sensor["attributes"]["unit_of_measurement"] | "W");
-    const char *name = sensor["name"] | LABELS[s];
-    char label[sizeof(flow_->name[s])];
-    std::snprintf(label, sizeof(label), "%s", name);
-    labels_changed = labels_changed || std::strcmp(unit, flow_->unit[s]) != 0 || std::strcmp(label, flow_->name[s]) != 0;
-    std::snprintf(flow_->unit[s], sizeof(flow_->unit[s]), "%s", unit);
-    std::snprintf(flow_->name[s], sizeof(flow_->name[s]), "%s", label);
-    float value = 0;
-    if (parse_number(sensor["state"], value)) {
-      flow_->current[s] = to_kw(value, flow_->unit[s]);
-      flow_->current_ok[s] = true;
-    }
-  }
-  if (labels_changed) flow_->generation++;
-}
-
 bool SigenFlow::sample(uint32_t epoch) {
   if (!flow_ || !flow_->day_start || epoch < flow_->day_start || epoch >= flow_->day_end) return false;
   const int slot = static_cast<int>((epoch - flow_->day_start) / SAMPLE_SECONDS);
@@ -234,12 +216,7 @@ class TodayTile : public tessera::Tile {
   void create(const tessera::TileContext &c) override {
     width_ = c.width;
     height_ = c.height;
-    const char *entities[SERIES];
-    for (int s = 0; s < SERIES; s++) {
-      std::snprintf(entities_[s], sizeof(entities_[s]), "%s", c.options[IDS[s]] | "");
-      entities[s] = entities_[s];
-    }
-    plugin_->configure(entities, tessera::epoch());
+    plugin_->configure(tessera::epoch());
 
     title_ = ui::label(c.parent, Font::HEADLINE, theme::INK);
     time_ = ui::label(c.parent, Font::BODY, theme::SUBTLE);
@@ -307,13 +284,8 @@ class TodayTile : public tessera::Tile {
     redraw();
   }
 
-  void on_state(JsonObjectConst data) override {
-    plugin_->update_current(data);
-    if (selected_ < 0) update_values(-1, tessera::epoch());
-  }
-
   void on_tick(uint32_t epoch) override {
-    plugin_->configure(entities_view(), epoch);
+    plugin_->configure(epoch);
     if (day_seen_ != plugin_->data().day_start) {
       day_seen_ = plugin_->data().day_start;
       selected_ = -1;
@@ -421,14 +393,8 @@ class TodayTile : public tessera::Tile {
   }
 
   SigenFlow *plugin_;
-  const char *const *entities_view() const {
-    for (int s = 0; s < SERIES; s++) entity_view_[s] = entities_[s];
-    return entity_view_;
-  }
   lv_obj_t *title_{}, *time_{}, *chart_{}, *names_[SERIES]{}, *values_[SERIES]{}, *axis_[4]{}, *status_{}, *selected_line_{};
   lv_chart_series_t *series_[SERIES]{};
-  char entities_[SERIES][64]{};
-  mutable const char *entity_view_[SERIES]{};
   int width_ = 0, height_ = 0, chart_x_ = 0, chart_y_ = 0, chart_w_ = 0, chart_h_ = 0;
   int selected_ = -1, ready_points_ = 0;
   int32_t range_min_ = -1000, range_max_ = 1000;
