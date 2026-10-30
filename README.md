@@ -13,14 +13,14 @@ Tap anywhere along the graph to select that time. The header then shows the five
 ## Setup
 
 1. Add this repository in Tessera's **Plugins** page and install it on a screen with PSRAM.
-2. Add **Power metrics · Today** to the layout. The tile is fixed at 3 × 2 cells.
-3. Select the five matching Home Assistant power sensors in the tile inspector.
+2. In the plugin's **On this screen** settings, select the five Home Assistant power sensors (Solar, Battery, Grid, Home, Car), then save and build the screen.
+3. Add **Power metrics · Today** to the layout. The tile is fixed at 3 × 2 cells; sensor choices are screen-level because older Tessera validators do not support per-tile entity options.
 
-Values are normalized to kW for the graph. Sensor names and current values come from the selected entities. Battery and grid values keep the sign supplied by the sensor, so charging/export can appear below zero when the integration uses negative values for those directions.
+The configured Sigenergy power entities are read in watts and normalized to kW for the graph. Battery and grid values keep the sign supplied by the sensor, so charging/export can appear below zero when the integration uses negative values for those directions.
 
 ## Today's history
 
-The plugin asks Home Assistant's recorder for five-minute mean statistics for the selected entities. Home Assistant supplies today's history again after an ESP restart; the screen does not need to keep a separate all-day buffer. Values shown for a selected point are the recorder's mean power for that five-minute interval, not a one-second instantaneous reading.
+The plugin asks Home Assistant's recorder for five-minute mean statistics for the selected entities. Home Assistant supplies today's history again after an ESP restart; the screen does not need to keep a separate all-day buffer. Values shown for a selected point are the recorder's mean power for that five-minute interval, not a one-second instantaneous reading. This version expects the selected sensors to report power in W.
 
 The selected sensors need Home Assistant long-term statistics (normally power sensors with `state_class: measurement` and a supported unit such as W or kW). If a sensor has no recorder statistics, that series remains empty and the tile reports the history error while still showing its live value. The EV sensor may come from the Sigenergy integration or a separate charger integration.
 
