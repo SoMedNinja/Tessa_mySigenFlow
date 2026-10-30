@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Use LVGL chart range API available in the Tessera firmware toolchain.
+
 ## 0.1.4
 
 - Replace the removed LVGL chart refresh call with object invalidation for current LVGL.
