@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+- Use Tessera list-wildcard syntax to map the recorder statistics object and samples.
+
 ## 0.1.2
 
 - Fix recorder statistics answer paths for Tessera field-path syntax.
