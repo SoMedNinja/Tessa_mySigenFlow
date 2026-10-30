@@ -357,7 +357,7 @@ class TodayTile : public tessera::Tile {
     range_min_ = min_y;
     range_max_ = max_y;
     lv_chart_set_axis_range(chart_, LV_CHART_AXIS_PRIMARY_Y, min_y, max_y);
-    lv_chart_refresh(chart_);
+    lv_obj_invalidate(chart_);
     if (selected_ >= 0 && selected_ < d.points && d.points > 0) {
       const int x = chart_x_ + (selected_ * 2 + 1) * chart_w_ / (d.points * 2);
       lv_point_precise_t line[2] = {{x, chart_y_}, {x, chart_y_ + chart_h_}};
@@ -389,7 +389,7 @@ class TodayTile : public tessera::Tile {
       }
     }
     if (live_available && ready_points_ == 0) ready_points_ = 1;
-    lv_chart_refresh(chart_);
+    lv_obj_invalidate(chart_);
   }
 
   SigenFlow *plugin_;
