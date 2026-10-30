@@ -356,7 +356,7 @@ class TodayTile : public tessera::Tile {
     const int32_t max_y = static_cast<int32_t>(std::ceil(high * 1000));
     range_min_ = min_y;
     range_max_ = max_y;
-    lv_chart_set_axis_range(chart_, LV_CHART_AXIS_PRIMARY_Y, min_y, max_y);
+    lv_chart_set_range(chart_, LV_CHART_AXIS_PRIMARY_Y, min_y, max_y);
     lv_obj_invalidate(chart_);
     if (selected_ >= 0 && selected_ < d.points && d.points > 0) {
       const int x = chart_x_ + (selected_ * 2 + 1) * chart_w_ / (d.points * 2);
@@ -385,7 +385,7 @@ class TodayTile : public tessera::Tile {
       if (scaled < range_min_ || scaled > range_max_) {
         range_min_ = std::min(range_min_, scaled - 250);
         range_max_ = std::max(range_max_, scaled + 250);
-        lv_chart_set_axis_range(chart_, LV_CHART_AXIS_PRIMARY_Y, range_min_, range_max_);
+        lv_chart_set_range(chart_, LV_CHART_AXIS_PRIMARY_Y, range_min_, range_max_);
       }
     }
     if (live_available && ready_points_ == 0) ready_points_ = 1;
