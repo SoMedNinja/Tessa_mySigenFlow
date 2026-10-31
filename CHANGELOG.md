@@ -1,10 +1,15 @@
 # Changelog
 
+## 0.2.1
+
+- Add a selected current price sensor and display its live SEK/kWh value in a highlighted header badge.
+
 ## 0.2.0
 
 - Replace the price-like timeline with an interactive energy flow diagram inspired by Tessera's Energy card.
 - Add live and today's total modes for solar, grid, battery, home and car power.
 - Limit layouts to 3 × 2 or 3 × 3 tiles.
+- Add a highlighted upper-left current electricity price badge in SEK/kWh.
 
 ## 0.1.7
 
