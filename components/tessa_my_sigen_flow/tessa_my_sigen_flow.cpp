@@ -249,7 +249,8 @@ class TodayTile : public tessera::Tile {
     lv_obj_set_style_text_color(price_, lv_color_hex(0xFFC56E), 0);
     lv_obj_set_size(price_, width_ * 45 / 100 - ui::px(12), ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(price_, ui::px(6), 0);
-    title_ = ui::label(c.parent, Font::HEADLINE, theme::INK);
+    const Font title_font = width_ < ui::px(500) ? Font::BODY : Font::HEADLINE;
+    title_ = ui::label(c.parent, title_font, theme::INK);
     lv_obj_remove_flag(title_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(title_, width_ * 27 / 100, ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(title_, width_ * 47 / 100, 0);
@@ -276,6 +277,7 @@ class TodayTile : public tessera::Tile {
     const int header_bottom = header_h + ui::px(8);
     const int footer_top = height_ - body_h - ui::px(2);
     const int outer_d = std::min({ui::px(88), width_ / 7, (footer_top - header_bottom) / 3});
+    compact_nodes_ = outer_d < ui::px(76);
     home_d_ = outer_d + ui::px(12);
     const int source_x = width_ * 32 / 100;
     const int grid_x = width_ * 13 / 100;
@@ -337,7 +339,7 @@ class TodayTile : public tessera::Tile {
       values_[n] = ui::label(circles_[n], Font::BODY, theme::INK);
       lv_obj_remove_flag(values_[n], LV_OBJ_FLAG_CLICKABLE);
       lv_obj_set_style_text_align(values_[n], LV_TEXT_ALIGN_CENTER, 0);
-      lv_obj_set_size(values_[n], d - ui::px(10), 2 * body_h);
+      lv_obj_set_size(values_[n], d - ui::px(10), compact_nodes_ ? body_h : 2 * body_h);
       lv_obj_set_pos(values_[n], ui::px(5), d / 2 + ui::px(2));
       names_[n] = ui::label(c.parent, Font::BODY, theme::MUTED);
       lv_obj_remove_flag(names_[n], LV_OBJ_FLAG_CLICKABLE);
@@ -413,28 +415,39 @@ class TodayTile : public tessera::Tile {
       if (!has_history) {
         for (auto &line : text) std::snprintf(line, sizeof(line), "--");
       } else {
-        std::snprintf(text[NODE_SOLAR], sizeof(text[0]), "%.1f kWh", total[0][0]);
-        std::snprintf(text[NODE_GRID], sizeof(text[0]), "IN %.1f\nOUT %.1f", total[2][0], total[2][1]);
-        std::snprintf(text[NODE_HOME], sizeof(text[0]), "%.1f kWh", total[3][0]);
-        std::snprintf(text[NODE_BATTERY], sizeof(text[0]), "CHG %.1f\nDIS %.1f", total[1][0], total[1][1]);
-        std::snprintf(text[NODE_CAR], sizeof(text[0]), "%.1f kWh", total[4][0]);
+        if (compact_nodes_) {
+          std::snprintf(text[NODE_SOLAR], sizeof(text[0]), "%.1f", total[0][0]);
+          std::snprintf(text[NODE_GRID], sizeof(text[0]), "%.1f/%.1f", total[2][0], total[2][1]);
+          std::snprintf(text[NODE_HOME], sizeof(text[0]), "%.1f", total[3][0]);
+          std::snprintf(text[NODE_BATTERY], sizeof(text[0]), "%.1f/%.1f", total[1][0], total[1][1]);
+          std::snprintf(text[NODE_CAR], sizeof(text[0]), "%.1f", total[4][0]);
+        } else {
+          std::snprintf(text[NODE_SOLAR], sizeof(text[0]), "%.1f kWh", total[0][0]);
+          std::snprintf(text[NODE_GRID], sizeof(text[0]), "IN %.1f\nOUT %.1f", total[2][0], total[2][1]);
+          std::snprintf(text[NODE_HOME], sizeof(text[0]), "%.1f kWh", total[3][0]);
+          std::snprintf(text[NODE_BATTERY], sizeof(text[0]), "CHG %.1f\nDIS %.1f", total[1][0], total[1][1]);
+          std::snprintf(text[NODE_CAR], sizeof(text[0]), "%.1f kWh", total[4][0]);
+        }
       }
       for (int n = 0; n < SERIES; n++) ui::set_text(values_[n], text[n]);
       if (d.history_error) ui::set_text(status_, plugin_->text("no_history"));
       else if (!has_history) ui::set_text(status_, plugin_->text("loading_history"));
-      else ui::set_text(status_, plugin_->text("daily_hint"));
+      else ui::set_text(status_, plugin_->text(compact_nodes_ ? "daily_hint_compact" : "daily_hint"));
     } else {
       for (int n = 0; n < SERIES; n++) {
         const int s = map_series[n];
         char text[48];
         if (!d.current_ok[s]) std::snprintf(text, sizeof(text), "--");
+        else if (s == 2 && compact_nodes_) std::snprintf(text, sizeof(text), "%c %.1f", d.current[s] < 0 ? 'O' : 'I', std::fabs(d.current[s]));
+        else if (s == 1 && compact_nodes_) std::snprintf(text, sizeof(text), "%c %.1f", d.current[s] < 0 ? 'C' : 'D', std::fabs(d.current[s]));
         else if (s == 2) std::snprintf(text, sizeof(text), "%s\n%.2f kW", d.current[s] < 0 ? "OUT" : "IN", std::fabs(d.current[s]));
         else if (s == 1) std::snprintf(text, sizeof(text), "%s\n%.2f kW", d.current[s] < 0 ? "CHG" : "DIS", std::fabs(d.current[s]));
+        else if (compact_nodes_) std::snprintf(text, sizeof(text), "%.1f", std::max(0.0f, d.current[s]));
         else std::snprintf(text, sizeof(text), "%.2f kW", std::max(0.0f, d.current[s]));
         ui::set_text(values_[n], text);
       }
       if (d.history_error) ui::set_text(status_, plugin_->text("no_history"));
-      else ui::set_text(status_, plugin_->text("live_hint"));
+      else ui::set_text(status_, plugin_->text(compact_nodes_ ? "live_hint_compact" : "live_hint"));
     }
     update_flows(epoch);
   }
@@ -472,7 +485,7 @@ class TodayTile : public tessera::Tile {
   tessera::Point centers_[SERIES]{};
   int width_ = 0, height_ = 0, home_d_ = 0;
   uint32_t day_seen_ = 0;
-  bool daily_ = false;
+  bool daily_ = false, compact_nodes_ = false;
 };
 
 void SigenFlow::setup() {
