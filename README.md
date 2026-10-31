@@ -1,33 +1,33 @@
-# Tessa mySigen Flow
+# Tessa mySigen Energy
 
-A Tessera tile inspired by the **Power Metrics · Today** graph in Sigenergy's Home Assistant flow dashboards. It plots five power sensors together as soft, coloured lines in an adjustable **2 × 1 to 3 × 3** tile:
+A native Tessera energy-flow tile inspired by Home Assistant's Energy view and the linked Tessera Energy-card design. The dark diagram uses coloured circles, connecting lines and moving dots for:
 
-- Solar
-- Battery
-- Grid
-- Home
+- Solar generation
+- Grid import or export
+- Battery charge or discharge
+- House consumption
 - Car charging
 
-Tap anywhere along the graph to select that time. The header then shows the five values for the selected five-minute interval and its local `HH:MM` start time. Tap a different point to inspect another time.
+Tap anywhere on the tile to switch between **Live** power in kW and **Today** totals in kWh. In daily mode, grid import/export and battery charge/discharge are shown separately.
 
 ## Setup
 
 1. Add this repository in Tessera's **Plugins** page and install it on a screen with PSRAM.
-2. In the plugin's **On this screen** settings, select the five Home Assistant power sensors (Solar, Battery, Grid, Home, Car), then save and build the screen.
-3. Add **Power metrics · Today** to the layout and resize it between 2 × 1 and 3 × 3 cells. The tile uses a compact reading layout at short heights; sensor choices are screen-level because older Tessera validators do not support per-tile entity options.
+2. In the plugin's **On this screen** settings, select the five Home Assistant power sensors (Solar, Battery, Grid, Home and Car), then save and build the screen.
+3. Add **Energy flow** to the layout. Choose **3 × 2** or **3 × 3** cells.
 
-The configured Sigenergy power entities are read in watts and normalized to kW for the graph. Battery and grid values keep the sign supplied by the sensor, so charging/export can appear below zero when the integration uses negative values for those directions.
+The plugin uses screen-level entity inputs to work with Tessera versions whose manifest validator does not support per-tile entity options. The selected entities are read in watts and displayed in kW. The car sensor should report positive power while charging. For grid power, positive means import and negative means export. For battery power, positive means discharge and negative means charge.
 
-## Today's history
+## Today's totals
 
-The plugin asks Home Assistant's recorder for five-minute mean statistics for the selected entities. Home Assistant supplies today's history again after an ESP restart; the screen does not need to keep a separate all-day buffer. Values shown for a selected point are the recorder's mean power for that five-minute interval, not a one-second instantaneous reading. This version expects the selected sensors to report power in W.
+Daily energy is integrated from Home Assistant's five-minute mean power statistics: mean kW × interval hours. The current five-minute slot is weighted by the elapsed portion of the slot. Home Assistant restores recorder history after a screen restart, so totals do not depend on a buffer stored only on the ESP.
 
-The selected sensors need Home Assistant long-term statistics (normally power sensors with `state_class: measurement` and a supported unit such as W or kW). If a sensor has no recorder statistics, that series remains empty and the tile reports the history error while still showing its live value. The EV sensor may come from the Sigenergy integration or a separate charger integration.
+The selected sensors need Home Assistant recorder statistics (normally long-term statistics for power sensors with `state_class: measurement` and unit W). If statistics are missing, the tile reports that history is unavailable and keeps displaying live power when the sensors are available.
 
 ## Device and memory
 
-The plugin is native C++ built into the ESPHome firmware. It makes no browser request, loads no web assets, and requires no HACS frontend component on the ESP. Its timeline buffer uses Tessera's PSRAM-first list and the manifest requires PSRAM. It is intended for the Waveshare ESP32-S3-Touch-LCD-7B and other Tessera screens with PSRAM.
+The plugin is native C++ built into the ESPHome firmware. It draws with Tessera's LVGL line and shape primitives, uses no chart widget, browser code, web assets, or HACS frontend component on the ESP. It requires PSRAM and is intended for the Waveshare ESP32-S3-Touch-LCD-7B and other Tessera screens with PSRAM.
 
 ## Permissions and privacy
 
-The screen asks Home Assistant for `recorder/statistics_during_period` for only the five entity IDs selected in this tile. It sends the current local day's start and end times and requests five-minute means. No data is sent to an external server.
+The screen reads the five entities selected in this plugin's settings and asks Home Assistant for `recorder/statistics_during_period` for those same entities. It requests today's local-day window in six-hour chunks. No data is sent to an external server.
