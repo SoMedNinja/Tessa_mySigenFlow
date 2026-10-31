@@ -16,7 +16,7 @@ The upper-left price badge shows the current value from a selected electricity-p
 
 1. Add this repository in Tessera's **Plugins** page and install it on a screen with PSRAM.
 2. In the plugin's **On this screen** settings, select a current price sensor and the five Home Assistant power sensors (Solar, Battery, Grid, Home and Car), then save and build the screen. The price sensor should report a numeric value in SEK/kWh, for example Nord Pool's current price sensor.
-3. Add **Energy flow** to the layout. Choose **3 × 2** or **3 × 3** cells.
+3. Add **Energy flow** to the layout. Resize it from **2 × 2** through **3 × 3** cells. Smaller tiles condense node readings to keep them legible.
 
 The plugin uses screen-level entity inputs to work with Tessera versions whose manifest validator does not support per-tile entity options. The selected entities are read in watts and displayed in kW. The car sensor should report positive power while charging. For grid power, positive means import and negative means export. For battery power, positive means discharge and negative means charge.
 
