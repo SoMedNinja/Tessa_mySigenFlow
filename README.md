@@ -8,9 +8,9 @@ A native Tessera energy-flow tile inspired by Home Assistant's Energy view and t
 - House consumption
 - Car charging
 
-Tap anywhere on the tile to switch between **Live** power in kW and **Today** totals in kWh. In daily mode, grid import/export and battery charge/discharge are shown separately.
+Use the top-right **Today view** / **Live view** button to switch between live power in kW and today's totals in kWh. In Today mode, grid import/export and battery charge/discharge are shown separately.
 
-The upper-left plain-text price line shows the current value in Live mode and the average price so far today in Today mode. Both use the selected electricity-price sensor in SEK/kWh.
+The upper-left plain-text price line shows the current value in Live mode and the average price so far today in Today mode. Both use the selected electricity-price sensor in SEK/kWh. Bubble fills and text follow Tessera's light or dark theme.
 
 ## Setup
 
