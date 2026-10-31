@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <string>
 
 namespace esphome::tessa_my_sigen_flow {
 
@@ -52,6 +53,17 @@ static uint32_t local_midnight(uint32_t epoch) {
   return midnight;
 }
 
+static bool parse_number(JsonVariantConst v, float &out) {
+  if (v.is<float>() || v.is<int>()) {
+    out = v.as<float>();
+    return std::isfinite(out);
+  }
+  const char *text = v | "";
+  char *end = nullptr;
+  out = std::strtof(text, &end);
+  return end != text && *end == 0 && std::isfinite(out);
+}
+
 static float to_kw(float value, const char *unit) {
   if (std::strcmp(unit, "W") == 0 || std::strcmp(unit, "w") == 0) return value / 1000.0f;
   if (std::strcmp(unit, "MW") == 0) return value * 1000.0f;
@@ -80,7 +92,6 @@ void SigenFlow::configure(uint32_t epoch) {
   if (!flow_ || !epoch) return;
   const uint32_t start = local_midnight(epoch);
   const uint32_t end = local_midnight(start + 26 * 3600);
-  bool same_entities = true;
   const bool same_day = flow_->day_start == start && flow_->day_end == end;
   if (same_day) return;
 
@@ -246,20 +257,31 @@ class TodayTile : public tessera::Tile {
     chart_y_ = top + ui::line_height(Font::BODY) + ui::line_height(Font::TITLE) + ui::px(8);
     chart_w_ = width_ - ui::px(4);
     chart_h_ = std::max(ui::px(70), height_ - chart_y_ - 2 * ui::line_height(Font::BODY) - ui::px(10));
-    chart_ = lv_chart_create(c.parent);
-    lv_obj_remove_flag(chart_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(chart_, chart_w_, chart_h_);
-    lv_obj_set_pos(chart_, chart_x_, chart_y_);
-    lv_obj_set_style_bg_opa(chart_, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(chart_, 0, LV_PART_MAIN);
-    lv_obj_set_style_line_width(chart_, std::max(2, ui::px(2)), LV_PART_ITEMS);
-    lv_obj_set_style_line_rounded(chart_, true, LV_PART_ITEMS);
-    lv_obj_set_style_size(chart_, 0, LV_PART_INDICATOR);
-    lv_obj_set_style_line_color(chart_, lv_color_hex(0x344253), LV_PART_MAIN);
-    lv_chart_set_type(chart_, LV_CHART_TYPE_CURVE);
-    lv_chart_set_point_count(chart_, MAX_POINTS);
-    lv_chart_set_div_line_count(chart_, 4, 0);
-    for (int s = 0; s < SERIES; s++) series_[s] = lv_chart_add_series(chart_, lv_color_hex(COLORS[s]), LV_CHART_AXIS_PRIMARY_Y);
+    for (int i = 0; i < 4; i++) {
+      grid_[i] = lv_line_create(c.parent);
+      lv_obj_remove_flag(grid_[i], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_style_line_width(grid_[i], std::max(1, ui::px(1)), 0);
+      lv_obj_set_style_line_color(grid_[i], lv_color_hex(0x344253), 0);
+      grid_points_[i][0] = {chart_x_, chart_y_ + chart_h_ * i / 3};
+      grid_points_[i][1] = {chart_x_ + chart_w_, chart_y_ + chart_h_ * i / 3};
+      lv_line_set_points(grid_[i], grid_points_[i], 2);
+      vertical_grid_[i] = lv_line_create(c.parent);
+      lv_obj_remove_flag(vertical_grid_[i], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_style_line_width(vertical_grid_[i], std::max(1, ui::px(1)), 0);
+      lv_obj_set_style_line_color(vertical_grid_[i], lv_color_hex(0x344253), 0);
+      const int x = chart_x_ + chart_w_ * i / 3;
+      vertical_points_[i][0] = {x, chart_y_};
+      vertical_points_[i][1] = {x, chart_y_ + chart_h_};
+      lv_line_set_points(vertical_grid_[i], vertical_points_[i], 2);
+    }
+    for (int s = 0; s < SERIES; s++) {
+      series_line_[s] = lv_line_create(c.parent);
+      lv_obj_remove_flag(series_line_[s], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_add_flag(series_line_[s], LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_style_line_width(series_line_[s], std::max(2, ui::px(2)), 0);
+      lv_obj_set_style_line_rounded(series_line_[s], true, 0);
+      lv_obj_set_style_line_color(series_line_[s], lv_color_hex(COLORS[s]), 0);
+    }
 
     const int axis_y = chart_y_ + chart_h_ + ui::px(2);
     for (int i = 0; i < 4; i++) {
@@ -338,26 +360,31 @@ class TodayTile : public tessera::Tile {
     }
     float low = 0, high = 0;
     ready_points_ = 0;
-    for (int s = 0; s < SERIES; s++) {
-      for (int i = 0; i < MAX_POINTS; i++) {
-        const float value = i < d.points ? d.values[s][i] : NAN;
-        if (std::isfinite(value)) {
-          low = std::min(low, value);
-          high = std::max(high, value);
-          ready_points_++;
-          lv_chart_set_series_value_by_id(chart_, series_[s], i, static_cast<int32_t>(std::lround(value * 1000)));
-        } else {
-          lv_chart_set_series_value_by_id(chart_, series_[s], i, LV_CHART_POINT_NONE);
-        }
-      }
+    for (int s = 0; s < SERIES; s++) for (int i = 0; i < d.points; i++) {
+      const float value = d.values[s][i];
+      if (!std::isfinite(value)) continue;
+      low = std::min(low, value);
+      high = std::max(high, value);
+      ready_points_++;
     }
     if (high - low < 0.2f) { low -= 0.1f; high += 0.1f; }
-    const int32_t min_y = static_cast<int32_t>(std::floor(low * 1000));
-    const int32_t max_y = static_cast<int32_t>(std::ceil(high * 1000));
-    range_min_ = min_y;
-    range_max_ = max_y;
-    lv_chart_set_range(chart_, LV_CHART_AXIS_PRIMARY_Y, min_y, max_y);
-    lv_obj_invalidate(chart_);
+    const float span = high - low;
+    for (int s = 0; s < SERIES; s++) {
+      uint32_t count = 0;
+      for (int i = 0; i < d.points; i++) {
+        const float value = d.values[s][i];
+        if (!std::isfinite(value)) continue;
+        const int x = chart_x_ + (d.points > 1 ? i * chart_w_ / (d.points - 1) : chart_w_ / 2);
+        const int y = chart_y_ + chart_h_ - static_cast<int>(std::lround((value - low) * chart_h_ / span));
+        series_points_[s][count++] = {x, y};
+      }
+      if (count >= 2) {
+        lv_line_set_points(series_line_[s], series_points_[s], count);
+        lv_obj_clear_flag(series_line_[s], LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(series_line_[s], LV_OBJ_FLAG_HIDDEN);
+      }
+    }
     if (selected_ >= 0 && selected_ < d.points && d.points > 0) {
       const int x = chart_x_ + (selected_ * 2 + 1) * chart_w_ / (d.points * 2);
       lv_point_precise_t line[2] = {{x, chart_y_}, {x, chart_y_ + chart_h_}};
@@ -369,36 +396,16 @@ class TodayTile : public tessera::Tile {
   }
 
   void update_live_slot() {
-    const FlowData &d = plugin_->data();
-    const int slot = d.live_slot;
-    if (slot < 0 || slot >= d.points) return;
-    bool live_available = false;
-    for (int s = 0; s < SERIES; s++) {
-      const float value = d.values[s][slot];
-      if (!std::isfinite(value)) {
-        lv_chart_set_series_value_by_id(chart_, series_[s], slot, LV_CHART_POINT_NONE);
-        continue;
-      }
-      live_available = true;
-      const int32_t scaled = static_cast<int32_t>(std::lround(value * 1000));
-      lv_chart_set_series_value_by_id(chart_, series_[s], slot, scaled);
-      if (scaled < range_min_ || scaled > range_max_) {
-        range_min_ = std::min(range_min_, scaled - 250);
-        range_max_ = std::max(range_max_, scaled + 250);
-        lv_chart_set_range(chart_, LV_CHART_AXIS_PRIMARY_Y, range_min_, range_max_);
-      }
-    }
-    if (live_available && ready_points_ == 0) ready_points_ = 1;
-    lv_obj_invalidate(chart_);
+    redraw();
   }
 
   SigenFlow *plugin_;
-  lv_obj_t *title_{}, *time_{}, *chart_{}, *names_[SERIES]{}, *values_[SERIES]{}, *axis_[4]{}, *status_{}, *selected_line_{};
-  lv_chart_series_t *series_[SERIES]{};
+  lv_obj_t *title_{}, *time_{}, *names_[SERIES]{}, *values_[SERIES]{}, *axis_[4]{}, *status_{}, *selected_line_{};
+  lv_obj_t *grid_[4]{}, *vertical_grid_[4]{}, *series_line_[SERIES]{};
+  lv_point_precise_t grid_points_[4][2]{}, vertical_points_[4][2]{}, series_points_[SERIES][MAX_POINTS]{};
   int width_ = 0, height_ = 0, chart_x_ = 0, chart_y_ = 0, chart_w_ = 0, chart_h_ = 0;
   int selected_ = -1, ready_points_ = 0;
-  int32_t range_min_ = -1000, range_max_ = 1000;
-  uint32_t generation_ = 0;
+  uint32_t generation_ = 0, day_seen_ = 0;
 };
 
 void SigenFlow::setup() {
