@@ -231,12 +231,13 @@ class TodayTile : public tessera::Tile {
   void create(const tessera::TileContext &c) override {
     width_ = c.width;
     height_ = c.height;
+    compact_layout_ = width_ < ui::px(520) || height_ < ui::px(220);
     plugin_->configure(tessera::epoch());
     price_box_ = lv_obj_create(c.parent);
     lv_obj_remove_style_all(price_box_);
     lv_obj_remove_flag(price_box_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(price_box_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(price_box_, width_ * 45 / 100, ui::line_height(Font::HEADLINE));
+    lv_obj_set_size(price_box_, width_ * (compact_layout_ ? 65 : 45) / 100, ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(price_box_, 0, 0);
     lv_obj_set_style_pad_all(price_box_, 0, 0);
     lv_obj_set_style_radius(price_box_, ui::px(10), 0);
@@ -247,21 +248,23 @@ class TodayTile : public tessera::Tile {
     price_ = ui::label(price_box_, Font::BODY, theme::INK);
     lv_obj_remove_flag(price_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_text_color(price_, lv_color_hex(0xFFC56E), 0);
-    lv_obj_set_size(price_, width_ * 45 / 100 - ui::px(12), ui::line_height(Font::HEADLINE));
+    lv_obj_set_size(price_, width_ * (compact_layout_ ? 65 : 45) / 100 - ui::px(12), ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(price_, ui::px(6), 0);
     const Font title_font = width_ < ui::px(500) ? Font::BODY : Font::HEADLINE;
     title_ = ui::label(c.parent, title_font, theme::INK);
     lv_obj_remove_flag(title_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(title_, width_ * 27 / 100, ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(title_, width_ * 47 / 100, 0);
+    if (compact_layout_) lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
 
     const int header_h = ui::line_height(Font::HEADLINE);
+    const int mode_w = width_ * (compact_layout_ ? 32 : 25) / 100;
     mode_pill_ = lv_obj_create(c.parent);
     lv_obj_remove_style_all(mode_pill_);
     lv_obj_remove_flag(mode_pill_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(mode_pill_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(mode_pill_, width_ / 4, header_h);
-    lv_obj_set_pos(mode_pill_, width_ * 3 / 4, 0);
+    lv_obj_set_size(mode_pill_, mode_w, header_h);
+    lv_obj_set_pos(mode_pill_, width_ - mode_w, 0);
     lv_obj_set_style_pad_all(mode_pill_, 0, 0);
     lv_obj_set_style_bg_color(mode_pill_, lv_color_hex(0x397C68), 0);
     lv_obj_set_style_bg_opa(mode_pill_, LV_OPA_COVER, 0);
@@ -269,13 +272,53 @@ class TodayTile : public tessera::Tile {
     lv_obj_set_style_radius(mode_pill_, header_h / 2, 0);
     mode_text_ = ui::label(mode_pill_, Font::BODY, theme::ON_ACCENT);
     lv_obj_remove_flag(mode_text_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(mode_text_, width_ / 4, header_h);
+    lv_obj_set_size(mode_text_, mode_w, header_h);
     lv_obj_set_style_text_align(mode_text_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(mode_text_, 0, 0);
 
     const int body_h = ui::line_height(Font::BODY);
     const int header_bottom = header_h + ui::px(8);
     const int footer_top = height_ - body_h - ui::px(2);
+    if (compact_layout_) {
+      const int cols = width_ < ui::px(520) ? 3 : 5;
+      const int rows = (SERIES + cols - 1) / cols;
+      const int card_top = header_bottom;
+      const int card_bottom = footer_top - body_h - ui::px(2);
+      const int row_h = std::max(body_h, (card_bottom - card_top) / rows);
+      const int gap = width_ < ui::px(280) ? ui::px(1) : ui::px(3);
+      for (int n = 0; n < SERIES; n++) {
+        const int col = n % cols;
+        const int row = n / cols;
+        const int cell_w = width_ / cols;
+        const int card_w = cell_w - gap;
+        const int card_h = std::max(body_h, row_h - gap);
+        compact_cards_[n] = lv_obj_create(c.parent);
+        lv_obj_remove_style_all(compact_cards_[n]);
+        lv_obj_remove_flag(compact_cards_[n], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(compact_cards_[n], LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(compact_cards_[n], card_w, card_h);
+        lv_obj_set_pos(compact_cards_[n], col * cell_w + gap / 2, card_top + row * row_h);
+        lv_obj_set_style_bg_color(compact_cards_[n], lv_color_hex(0x242A30), 0);
+        lv_obj_set_style_bg_opa(compact_cards_[n], LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(compact_cards_[n], lv_color_hex(NODE_COLORS[n]), 0);
+        lv_obj_set_style_border_width(compact_cards_[n], std::max(1, ui::px(1)), 0);
+        lv_obj_set_style_radius(compact_cards_[n], ui::px(6), 0);
+        compact_values_[n] = ui::label(compact_cards_[n], Font::BODY, theme::INK);
+        lv_obj_remove_flag(compact_values_[n], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_text_align(compact_values_[n], LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(compact_values_[n], lv_color_hex(NODE_COLORS[n]), 0);
+        lv_obj_set_size(compact_values_[n], card_w - gap, card_h);
+        lv_obj_set_pos(compact_values_[n], gap / 2, 0);
+      }
+      compact_status_ = ui::label(c.parent, Font::BODY, theme::SUBTLE);
+      lv_obj_remove_flag(compact_status_, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_size(compact_status_, width_, body_h);
+      lv_obj_set_style_text_align(compact_status_, LV_TEXT_ALIGN_CENTER, 0);
+      lv_obj_set_pos(compact_status_, 0, footer_top);
+      day_seen_ = plugin_->data().day_start;
+      refresh(tessera::epoch());
+      return;
+    }
     const int outer_d = std::min({ui::px(88), width_ / 7, (footer_top - header_bottom) / 3});
     compact_nodes_ = outer_d < ui::px(76);
     home_d_ = outer_d + ui::px(12);
@@ -401,10 +444,53 @@ class TodayTile : public tessera::Tile {
     ui::set_text(title_, plugin_->text("title"));
     ui::set_text(mode_text_, plugin_->text(daily_ ? "daily" : "live"));
     char price_text[48];
-    if (d.price_ok) std::snprintf(price_text, sizeof(price_text), "%s %.2f SEK/kWh", plugin_->text("price"), d.price);
+    if (compact_layout_) {
+      if (d.price_ok) std::snprintf(price_text, sizeof(price_text), "%.2f SEK/kWh", d.price);
+      else std::snprintf(price_text, sizeof(price_text), "-- SEK/kWh");
+    } else if (d.price_ok) std::snprintf(price_text, sizeof(price_text), "%s %.2f SEK/kWh", plugin_->text("price"), d.price);
     else std::snprintf(price_text, sizeof(price_text), "%s -- SEK/kWh", plugin_->text("price"));
     ui::set_text(price_, price_text);
     const int map_series[SERIES] = {0, 2, 3, 1, 4};
+    if (compact_layout_) {
+      if (daily_) {
+        float total[SERIES][2]{};
+        totals(total, epoch);
+        bool has_history = false;
+        for (int s = 0; s < SERIES; s++)
+          for (int i = 0; i < d.points; i++) has_history = has_history || std::isfinite(d.values[s][i]);
+        if (!has_history) {
+          for (int n = 0; n < SERIES; n++) ui::set_text(compact_values_[n], "--");
+        } else {
+          char text[48];
+          std::snprintf(text, sizeof(text), "S %.1f", total[0][0]);
+          ui::set_text(compact_values_[NODE_SOLAR], text);
+          std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "G%.1f/%.1f" : "G %.1f/%.1f", total[2][0], total[2][1]);
+          ui::set_text(compact_values_[NODE_GRID], text);
+          std::snprintf(text, sizeof(text), "H %.1f", total[3][0]);
+          ui::set_text(compact_values_[NODE_HOME], text);
+          std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "B%.1f/%.1f" : "B %.1f/%.1f", total[1][0], total[1][1]);
+          ui::set_text(compact_values_[NODE_BATTERY], text);
+          std::snprintf(text, sizeof(text), "EV %.1f", total[4][0]);
+          ui::set_text(compact_values_[NODE_CAR], text);
+        }
+        if (d.history_error) ui::set_text(compact_status_, plugin_->text("no_history"));
+        else ui::set_text(compact_status_, plugin_->text("compact_daily_status"));
+      } else {
+        for (int n = 0; n < SERIES; n++) {
+          const int s = map_series[n];
+          char text[32];
+          if (!d.current_ok[s]) std::snprintf(text, sizeof(text), "--");
+          else if (s == 2) std::snprintf(text, sizeof(text), "G%c%.1f", d.current[s] < 0 ? '-' : '+', std::fabs(d.current[s]));
+          else if (s == 1) std::snprintf(text, sizeof(text), "B%c%.1f", d.current[s] < 0 ? '-' : '+', std::fabs(d.current[s]));
+          else if (n == NODE_CAR) std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "E%.1f" : "EV %.1f", std::max(0.0f, d.current[s]));
+          else std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "%c%.1f" : "%c %.1f", n == NODE_SOLAR ? 'S' : 'H', std::max(0.0f, d.current[s]));
+          ui::set_text(compact_values_[n], text);
+        }
+        if (d.history_error) ui::set_text(compact_status_, plugin_->text("no_history"));
+        else ui::set_text(compact_status_, plugin_->text("compact_live_status"));
+      }
+      return;
+    }
     if (daily_) {
       float total[SERIES][2]{};
       totals(total, epoch);
@@ -478,14 +564,15 @@ class TodayTile : public tessera::Tile {
   }
 
   SigenFlow *plugin_;
-  lv_obj_t *title_{}, *price_box_{}, *price_{}, *mode_pill_{}, *mode_text_{}, *status_{};
+  lv_obj_t *title_{}, *price_box_{}, *price_{}, *mode_pill_{}, *mode_text_{}, *status_{}, *compact_status_{};
   lv_obj_t *circles_[SERIES]{}, *icon_[SERIES]{}, *names_[SERIES]{}, *values_[SERIES]{};
+  lv_obj_t *compact_cards_[SERIES]{}, *compact_values_[SERIES]{};
   lv_obj_t *connectors_[SERIES]{}, *dots_[SERIES]{};
   lv_point_precise_t connector_points_[SERIES][2]{};
   tessera::Point centers_[SERIES]{};
   int width_ = 0, height_ = 0, home_d_ = 0;
   uint32_t day_seen_ = 0;
-  bool daily_ = false, compact_nodes_ = false;
+  bool daily_ = false, compact_nodes_ = false, compact_layout_ = false;
 };
 
 void SigenFlow::setup() {
