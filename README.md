@@ -1,6 +1,6 @@
 # Tessa mySigen Flow
 
-A Tessera tile inspired by the **Power Metrics · Today** graph in Sigenergy's Home Assistant flow dashboards. It plots five power sensors together as soft, coloured lines in a fixed **3 × 2** tile:
+A Tessera tile inspired by the **Power Metrics · Today** graph in Sigenergy's Home Assistant flow dashboards. It plots five power sensors together as soft, coloured lines in an adjustable **2 × 1 to 3 × 3** tile:
 
 - Solar
 - Battery
@@ -14,7 +14,7 @@ Tap anywhere along the graph to select that time. The header then shows the five
 
 1. Add this repository in Tessera's **Plugins** page and install it on a screen with PSRAM.
 2. In the plugin's **On this screen** settings, select the five Home Assistant power sensors (Solar, Battery, Grid, Home, Car), then save and build the screen.
-3. Add **Power metrics · Today** to the layout. The tile is fixed at 3 × 2 cells; sensor choices are screen-level because older Tessera validators do not support per-tile entity options.
+3. Add **Power metrics · Today** to the layout and resize it between 2 × 1 and 3 × 3 cells. The tile uses a compact reading layout at short heights; sensor choices are screen-level because older Tessera validators do not support per-tile entity options.
 
 The configured Sigenergy power entities are read in watts and normalized to kW for the graph. Battery and grid values keep the sign supplied by the sensor, so charging/export can appear below zero when the integration uses negative values for those directions.
 
