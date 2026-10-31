@@ -227,6 +227,7 @@ class TodayTile : public tessera::Tile {
   void create(const tessera::TileContext &c) override {
     width_ = c.width;
     height_ = c.height;
+    compact_ = height_ < ui::px(210);
     plugin_->configure(tessera::epoch());
 
     title_ = ui::label(c.parent, Font::HEADLINE, theme::INK);
@@ -239,24 +240,27 @@ class TodayTile : public tessera::Tile {
     lv_obj_set_size(time_, width_ / 3, ui::line_height(Font::BODY));
     lv_obj_set_pos(time_, width_ * 2 / 3, ui::px(3));
 
-    const int top = ui::line_height(Font::HEADLINE) + ui::px(8);
+    const Font value_font = compact_ ? Font::BODY : Font::TITLE;
+    const int top = ui::line_height(Font::HEADLINE) + (compact_ ? ui::px(4) : ui::px(8));
     const int columns = width_ / SERIES;
     for (int s = 0; s < SERIES; s++) {
       names_[s] = ui::label(c.parent, Font::BODY, theme::SUBTLE);
-      values_[s] = ui::label(c.parent, Font::TITLE, theme::INK);
+      values_[s] = ui::label(c.parent, value_font, theme::INK);
       lv_obj_remove_flag(names_[s], LV_OBJ_FLAG_CLICKABLE);
       lv_obj_remove_flag(values_[s], LV_OBJ_FLAG_CLICKABLE);
       lv_obj_set_style_text_color(names_[s], lv_color_hex(COLORS[s]), 0);
       lv_obj_set_size(names_[s], columns - ui::px(4), ui::line_height(Font::BODY));
       lv_obj_set_pos(names_[s], s * columns, top);
-      lv_obj_set_size(values_[s], columns - ui::px(4), ui::line_height(Font::TITLE));
+      lv_obj_set_size(values_[s], columns - ui::px(4), ui::line_height(value_font));
       lv_obj_set_pos(values_[s], s * columns, top + ui::line_height(Font::BODY));
     }
 
     chart_x_ = ui::px(2);
-    chart_y_ = top + ui::line_height(Font::BODY) + ui::line_height(Font::TITLE) + ui::px(8);
+    chart_y_ = top + ui::line_height(Font::BODY) + ui::line_height(value_font) + (compact_ ? ui::px(4) : ui::px(8));
     chart_w_ = width_ - ui::px(4);
-    chart_h_ = std::max(ui::px(70), height_ - chart_y_ - 2 * ui::line_height(Font::BODY) - ui::px(10));
+    chart_h_ = compact_
+        ? std::max(ui::px(24), height_ - chart_y_ - ui::line_height(Font::BODY) - ui::px(6))
+        : std::max(ui::px(70), height_ - chart_y_ - 2 * ui::line_height(Font::BODY) - ui::px(10));
     for (int i = 0; i < 4; i++) {
       grid_[i] = lv_line_create(c.parent);
       lv_obj_remove_flag(grid_[i], LV_OBJ_FLAG_CLICKABLE);
@@ -297,6 +301,7 @@ class TodayTile : public tessera::Tile {
     lv_obj_remove_flag(status_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(status_, width_ - ui::px(4), ui::line_height(Font::BODY));
     lv_obj_set_pos(status_, 0, axis_y + ui::line_height(Font::BODY));
+    if (compact_) lv_obj_add_flag(status_, LV_OBJ_FLAG_HIDDEN);
     selected_line_ = lv_line_create(c.parent);
     lv_obj_remove_flag(selected_line_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_line_width(selected_line_, std::max(1, ui::px(1)), 0);
@@ -406,6 +411,7 @@ class TodayTile : public tessera::Tile {
   int width_ = 0, height_ = 0, chart_x_ = 0, chart_y_ = 0, chart_w_ = 0, chart_h_ = 0;
   int selected_ = -1, ready_points_ = 0;
   uint32_t generation_ = 0, day_seen_ = 0;
+  bool compact_ = false;
 };
 
 void SigenFlow::setup() {
