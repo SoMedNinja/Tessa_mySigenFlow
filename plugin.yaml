@@ -12,7 +12,7 @@ sensor:
     internal: true
     on_value:
       - lambda: |-
-          id(sigen_flow).update_price(x);
+          id(sigen_flow).update_price(x, "${PRICE_ENTITY}", tessera::epoch());
   - platform: homeassistant
     id: sigen_battery_soc
     entity_id: ${BATTERY_SOC_ENTITY}
