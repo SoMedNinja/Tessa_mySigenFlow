@@ -16,8 +16,6 @@ constexpr int SERIES = 5;
 constexpr int MAX_POINTS = 300;  // 25 hours on the day clocks go back, sampled every five minutes
 constexpr uint32_t SAMPLE_SECONDS = 300;
 constexpr uint32_t CHUNK_SECONDS = 6 * 3600;
-constexpr const char *LABELS[SERIES] = {"solar", "battery", "grid", "home", "car"};
-constexpr uint32_t COLORS[SERIES] = {0xF2C94C, 0x43D9D0, 0x6EA8FE, 0xB28DFF, 0xFF9F68};
 
 struct FlowData {
   tessera::List<float> values[SERIES];
@@ -68,13 +66,6 @@ static float to_kw(float value, const char *unit) {
   if (std::strcmp(unit, "W") == 0 || std::strcmp(unit, "w") == 0) return value / 1000.0f;
   if (std::strcmp(unit, "MW") == 0) return value * 1000.0f;
   return value;
-}
-
-static std::string value_text(float value, bool ok) {
-  if (!ok || !std::isfinite(value)) return "--";
-  char out[20];
-  std::snprintf(out, sizeof(out), "%.2f kW", value);
-  return out;
 }
 
 static void iso_time(uint32_t epoch, char out[24]) {
@@ -220,6 +211,10 @@ bool SigenFlow::sample(uint32_t epoch) {
   return changed;
 }
 
+constexpr int NODE_SOLAR = 0, NODE_GRID = 1, NODE_HOME = 2, NODE_BATTERY = 3, NODE_CAR = 4;
+constexpr uint32_t NODE_COLORS[SERIES] = {0xFF9D22, 0xA884E8, 0xFF9D22, 0xEC5B9A, 0x48D4D4};
+constexpr uint32_t NODE_ICONS[SERIES] = {0xF0A72, 0xF0D3E, 0xF02DC, 0xF1901, 0xF0B6C};
+
 class TodayTile : public tessera::Tile {
  public:
   explicit TodayTile(SigenFlow *plugin) : plugin_(plugin) {}
@@ -227,191 +222,227 @@ class TodayTile : public tessera::Tile {
   void create(const tessera::TileContext &c) override {
     width_ = c.width;
     height_ = c.height;
-    compact_ = height_ < ui::px(210);
     plugin_->configure(tessera::epoch());
-
     title_ = ui::label(c.parent, Font::HEADLINE, theme::INK);
-    time_ = ui::label(c.parent, Font::BODY, theme::SUBTLE);
-    lv_obj_set_style_text_align(time_, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_remove_flag(title_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(time_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(title_, width_ * 2 / 3, ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(title_, 0, 0);
-    lv_obj_set_size(time_, width_ / 3, ui::line_height(Font::BODY));
-    lv_obj_set_pos(time_, width_ * 2 / 3, ui::px(3));
 
-    const Font value_font = compact_ ? Font::BODY : Font::TITLE;
-    const int top = ui::line_height(Font::HEADLINE) + (compact_ ? ui::px(4) : ui::px(8));
-    const int columns = width_ / SERIES;
-    for (int s = 0; s < SERIES; s++) {
-      names_[s] = ui::label(c.parent, Font::BODY, theme::SUBTLE);
-      values_[s] = ui::label(c.parent, value_font, theme::INK);
-      lv_obj_remove_flag(names_[s], LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_remove_flag(values_[s], LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_set_style_text_color(names_[s], lv_color_hex(COLORS[s]), 0);
-      lv_obj_set_size(names_[s], columns - ui::px(4), ui::line_height(Font::BODY));
-      lv_obj_set_pos(names_[s], s * columns, top);
-      lv_obj_set_size(values_[s], columns - ui::px(4), ui::line_height(value_font));
-      lv_obj_set_pos(values_[s], s * columns, top + ui::line_height(Font::BODY));
-    }
+    const int header_h = ui::line_height(Font::HEADLINE);
+    mode_pill_ = lv_obj_create(c.parent);
+    lv_obj_remove_style_all(mode_pill_);
+    lv_obj_remove_flag(mode_pill_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(mode_pill_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(mode_pill_, width_ / 4, header_h);
+    lv_obj_set_pos(mode_pill_, width_ * 3 / 4, 0);
+    lv_obj_set_style_pad_all(mode_pill_, 0, 0);
+    lv_obj_set_style_bg_color(mode_pill_, lv_color_hex(0x397C68), 0);
+    lv_obj_set_style_bg_opa(mode_pill_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(mode_pill_, 0, 0);
+    lv_obj_set_style_radius(mode_pill_, header_h / 2, 0);
+    mode_text_ = ui::label(mode_pill_, Font::BODY, theme::ON_ACCENT);
+    lv_obj_remove_flag(mode_text_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(mode_text_, width_ / 4, header_h);
+    lv_obj_set_style_text_align(mode_text_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(mode_text_, 0, 0);
 
-    chart_x_ = ui::px(2);
-    chart_y_ = top + ui::line_height(Font::BODY) + ui::line_height(value_font) + (compact_ ? ui::px(4) : ui::px(8));
-    chart_w_ = width_ - ui::px(4);
-    chart_h_ = compact_
-        ? std::max(ui::px(24), height_ - chart_y_ - ui::line_height(Font::BODY) - ui::px(6))
-        : std::max(ui::px(70), height_ - chart_y_ - 2 * ui::line_height(Font::BODY) - ui::px(10));
+    const int body_h = ui::line_height(Font::BODY);
+    const int header_bottom = header_h + ui::px(8);
+    const int footer_top = height_ - body_h - ui::px(2);
+    const int outer_d = std::min({ui::px(88), width_ / 7, (footer_top - header_bottom) / 3});
+    home_d_ = outer_d + ui::px(12);
+    const int source_x = width_ * 32 / 100;
+    const int grid_x = width_ * 13 / 100;
+    const int right_x = width_ * 87 / 100;
+    const int home_x = width_ * 56 / 100;
+    const int top_y = header_bottom + body_h + ui::px(2) + outer_d / 2;
+    const int bottom_y = footer_top - 2 * body_h - ui::px(4) - outer_d / 2;
+    const int middle_y = (top_y + bottom_y) / 2;
+    centers_[NODE_SOLAR] = {source_x, top_y};
+    centers_[NODE_GRID] = {grid_x, middle_y};
+    centers_[NODE_HOME] = {home_x, middle_y};
+    centers_[NODE_BATTERY] = {source_x, bottom_y};
+    centers_[NODE_CAR] = {right_x, middle_y};
+
+    const int from_node[4] = {NODE_SOLAR, NODE_GRID, NODE_BATTERY, NODE_HOME};
+    const int to_node[4] = {NODE_HOME, NODE_HOME, NODE_HOME, NODE_CAR};
+    const int connector_colors[4] = {NODE_SOLAR, NODE_GRID, NODE_BATTERY, NODE_CAR};
     for (int i = 0; i < 4; i++) {
-      grid_[i] = lv_line_create(c.parent);
-      lv_obj_remove_flag(grid_[i], LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_set_style_line_width(grid_[i], std::max(1, ui::px(1)), 0);
-      lv_obj_set_style_line_color(grid_[i], lv_color_hex(0x344253), 0);
-      grid_points_[i][0] = {chart_x_, chart_y_ + chart_h_ * i / 3};
-      grid_points_[i][1] = {chart_x_ + chart_w_, chart_y_ + chart_h_ * i / 3};
-      lv_line_set_points(grid_[i], grid_points_[i], 2);
-      vertical_grid_[i] = lv_line_create(c.parent);
-      lv_obj_remove_flag(vertical_grid_[i], LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_set_style_line_width(vertical_grid_[i], std::max(1, ui::px(1)), 0);
-      lv_obj_set_style_line_color(vertical_grid_[i], lv_color_hex(0x344253), 0);
-      const int x = chart_x_ + chart_w_ * i / 3;
-      vertical_points_[i][0] = {x, chart_y_};
-      vertical_points_[i][1] = {x, chart_y_ + chart_h_};
-      lv_line_set_points(vertical_grid_[i], vertical_points_[i], 2);
-    }
-    for (int s = 0; s < SERIES; s++) {
-      series_line_[s] = lv_line_create(c.parent);
-      lv_obj_remove_flag(series_line_[s], LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_add_flag(series_line_[s], LV_OBJ_FLAG_HIDDEN);
-      lv_obj_set_style_line_width(series_line_[s], std::max(2, ui::px(2)), 0);
-      lv_obj_set_style_line_rounded(series_line_[s], true, 0);
-      lv_obj_set_style_line_color(series_line_[s], lv_color_hex(COLORS[s]), 0);
+      connectors_[i] = lv_line_create(c.parent);
+      lv_obj_remove_flag(connectors_[i], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_style_line_width(connectors_[i], std::max(1, ui::px(2)), 0);
+      lv_obj_set_style_line_color(connectors_[i], lv_color_hex(NODE_COLORS[connector_colors[i]]), 0);
+      connector_points_[i][0] = {centers_[from_node[i]].x, centers_[from_node[i]].y};
+      connector_points_[i][1] = {centers_[to_node[i]].x, centers_[to_node[i]].y};
+      lv_line_set_points(connectors_[i], connector_points_[i], 2);
+      dots_[i] = lv_obj_create(c.parent);
+      lv_obj_remove_style_all(dots_[i]);
+      lv_obj_remove_flag(dots_[i], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_remove_flag(dots_[i], LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_set_size(dots_[i], ui::px(8), ui::px(8));
+      lv_obj_set_style_radius(dots_[i], LV_RADIUS_CIRCLE, 0);
+      lv_obj_set_style_border_width(dots_[i], 0, 0);
+      lv_obj_set_style_bg_color(dots_[i], lv_color_hex(NODE_COLORS[connector_colors[i]]), 0);
+      lv_obj_set_style_bg_opa(dots_[i], LV_OPA_COVER, 0);
     }
 
-    const int axis_y = chart_y_ + chart_h_ + ui::px(2);
-    for (int i = 0; i < 4; i++) {
-      axis_[i] = ui::label(c.parent, Font::BODY, theme::SUBTLE);
-      lv_obj_remove_flag(axis_[i], LV_OBJ_FLAG_CLICKABLE);
-      const char *labels[] = {"00", "06", "12", "18"};
-      ui::set_text(axis_[i], labels[i]);
-      const int x = chart_x_ + chart_w_ * i / 4;
-      lv_obj_set_size(axis_[i], ui::text_width(labels[i], Font::BODY) + 2, ui::line_height(Font::BODY));
-      lv_obj_set_pos(axis_[i], x, axis_y);
+    const char *name_keys[SERIES] = {"solar", "grid", "home", "battery", "car"};
+    const uint32_t badge_icons[SERIES] = {NODE_ICONS[0], NODE_ICONS[1], NODE_ICONS[2], NODE_ICONS[3], NODE_ICONS[4]};
+    for (int n = 0; n < SERIES; n++) {
+      const int d = n == NODE_HOME ? home_d_ : outer_d;
+      circles_[n] = lv_obj_create(c.parent);
+      lv_obj_remove_style_all(circles_[n]);
+      lv_obj_remove_flag(circles_[n], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_remove_flag(circles_[n], LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_set_style_pad_all(circles_[n], 0, 0);
+      lv_obj_set_size(circles_[n], d, d);
+      lv_obj_set_pos(circles_[n], centers_[n].x - d / 2, centers_[n].y - d / 2);
+      lv_obj_set_style_radius(circles_[n], LV_RADIUS_CIRCLE, 0);
+      lv_obj_set_style_bg_opa(circles_[n], LV_OPA_TRANSP, 0);
+      lv_obj_set_style_border_width(circles_[n], std::max(2, ui::px(2)), 0);
+      lv_obj_set_style_border_color(circles_[n], lv_color_hex(NODE_COLORS[n]), 0);
+      icon_[n] = ui::label(circles_[n], Font::ICON, theme::INK);
+      lv_obj_remove_flag(icon_[n], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_style_text_align(icon_[n], LV_TEXT_ALIGN_CENTER, 0);
+      ui::set_text(icon_[n], ui::icon(badge_icons[n]));
+      const int icon_h = ui::line_height(Font::ICON);
+      lv_obj_set_size(icon_[n], d - ui::px(12), icon_h);
+      lv_obj_set_pos(icon_[n], ui::px(6), d / 2 - icon_h / 2 - ui::px(8));
+      values_[n] = ui::label(circles_[n], Font::BODY, theme::INK);
+      lv_obj_remove_flag(values_[n], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_style_text_align(values_[n], LV_TEXT_ALIGN_CENTER, 0);
+      lv_obj_set_size(values_[n], d - ui::px(10), 2 * body_h);
+      lv_obj_set_pos(values_[n], ui::px(5), d / 2 + ui::px(2));
+      names_[n] = ui::label(c.parent, Font::BODY, theme::MUTED);
+      lv_obj_remove_flag(names_[n], LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_style_text_align(names_[n], LV_TEXT_ALIGN_CENTER, 0);
+      const int label_w = n == NODE_HOME ? width_ * 24 / 100 : (n == NODE_GRID || n == NODE_CAR ? width_ * 24 / 100 : width_ * 26 / 100);
+      lv_obj_set_size(names_[n], label_w, body_h);
+      int label_y;
+      if (n == NODE_BATTERY) label_y = centers_[n].y + d / 2 + ui::px(1);
+      else label_y = centers_[n].y - d / 2 - body_h - ui::px(1);
+      lv_obj_set_pos(names_[n], centers_[n].x - label_w / 2, label_y);
+      ui::set_text(names_[n], plugin_->text(name_keys[n]));
     }
     status_ = ui::label(c.parent, Font::BODY, theme::SUBTLE);
     lv_obj_remove_flag(status_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(status_, width_ - ui::px(4), ui::line_height(Font::BODY));
-    lv_obj_set_pos(status_, 0, axis_y + ui::line_height(Font::BODY));
-    if (compact_) lv_obj_add_flag(status_, LV_OBJ_FLAG_HIDDEN);
-    selected_line_ = lv_line_create(c.parent);
-    lv_obj_remove_flag(selected_line_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_line_width(selected_line_, std::max(1, ui::px(1)), 0);
-    lv_obj_set_style_line_color(selected_line_, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_add_flag(selected_line_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(status_, width_, body_h);
+    lv_obj_set_pos(status_, 0, footer_top);
     day_seen_ = plugin_->data().day_start;
-    redraw();
+    refresh(tessera::epoch());
   }
 
   void on_tick(uint32_t epoch) override {
     plugin_->configure(epoch);
     if (day_seen_ != plugin_->data().day_start) {
       day_seen_ = plugin_->data().day_start;
-      selected_ = -1;
-      lv_obj_add_flag(selected_line_, LV_OBJ_FLAG_HIDDEN);
     }
-    const bool live_changed = plugin_->sample(epoch);
-    if (generation_ != plugin_->data().generation) redraw();
-    else if (live_changed) update_live_slot();
-    if (selected_ < 0) update_values(-1, epoch);
+    plugin_->sample(epoch);
+    refresh(epoch);
   }
 
-  void on_theme() override { redraw(); }
+  void on_theme() override { refresh(tessera::epoch()); }
 
   void on_tap() override {
-    const tessera::Point p = tessera::tap_point();
-    if (p.x < chart_x_ || p.x >= chart_x_ + chart_w_ || p.y < chart_y_ || p.y >= chart_y_ + chart_h_) return;
-    const FlowData &d = plugin_->data();
-    if (d.points <= 0 || !d.day_start) return;
-    selected_ = std::clamp<int>((p.x - chart_x_) * d.points / chart_w_, 0, d.points - 1);
-    update_values(selected_, d.day_start + selected_ * SAMPLE_SECONDS);
-    lv_point_precise_t line[2] = {{p.x, chart_y_}, {p.x, chart_y_ + chart_h_}};
-    lv_line_set_points(selected_line_, line, 2);
-    lv_obj_clear_flag(selected_line_, LV_OBJ_FLAG_HIDDEN);
+    daily_ = !daily_;
+    refresh(tessera::epoch());
   }
 
  private:
-  void update_values(int slot, uint32_t epoch) {
+  void totals(float result[SERIES][2], uint32_t epoch) const {
     const FlowData &d = plugin_->data();
-    if (slot >= 0) {
-      const tessera::LocalTime local = tessera::local_time(epoch);
-      char text[8];
-      std::snprintf(text, sizeof(text), "%02d:%02d", static_cast<int>(local.hour), static_cast<int>(local.minute));
-      ui::set_text(time_, text);
-      for (int s = 0; s < SERIES; s++) ui::set_text(values_[s], value_text(d.values[s][slot], std::isfinite(d.values[s][slot])));
-      ui::set_text(status_, plugin_->text("selected_hint"));
-      return;
-    }
-    ui::set_text(time_, plugin_->text("live"));
-    for (int s = 0; s < SERIES; s++) ui::set_text(values_[s], value_text(d.current[s], d.current_ok[s]));
-    if (d.history_error) ui::set_text(status_, plugin_->text("no_history"));
-    else if (ready_points_ == 0) ui::set_text(status_, plugin_->text("loading_history"));
-    else ui::set_text(status_, plugin_->text("today_hint"));
-  }
-
-  void redraw() {
-    const FlowData &d = plugin_->data();
-    ui::set_text(title_, plugin_->text("title"));
-    for (int s = 0; s < SERIES; s++) {
-      ui::set_text(names_[s], d.name[s][0] ? d.name[s] : plugin_->text(LABELS[s]));
-    }
-    float low = 0, high = 0;
-    ready_points_ = 0;
+    for (int s = 0; s < SERIES; s++) result[s][0] = result[s][1] = 0;
+    if (!d.day_start || !epoch) return;
     for (int s = 0; s < SERIES; s++) for (int i = 0; i < d.points; i++) {
       const float value = d.values[s][i];
       if (!std::isfinite(value)) continue;
-      low = std::min(low, value);
-      high = std::max(high, value);
-      ready_points_++;
-    }
-    if (high - low < 0.2f) { low -= 0.1f; high += 0.1f; }
-    const float span = high - low;
-    for (int s = 0; s < SERIES; s++) {
-      uint32_t count = 0;
-      for (int i = 0; i < d.points; i++) {
-        const float value = d.values[s][i];
-        if (!std::isfinite(value)) continue;
-        const int x = chart_x_ + (d.points > 1 ? i * chart_w_ / (d.points - 1) : chart_w_ / 2);
-        const int y = chart_y_ + chart_h_ - static_cast<int>(std::lround((value - low) * chart_h_ / span));
-        series_points_[s][count++] = {x, y};
+      float seconds = SAMPLE_SECONDS;
+      if (i == d.live_slot) {
+        const uint32_t start = d.day_start + i * SAMPLE_SECONDS;
+        seconds = epoch > start ? std::min<float>(SAMPLE_SECONDS, epoch - start) : 0;
       }
-      if (count >= 2) {
-        lv_line_set_points(series_line_[s], series_points_[s], count);
-        lv_obj_clear_flag(series_line_[s], LV_OBJ_FLAG_HIDDEN);
-      } else {
-        lv_obj_add_flag(series_line_[s], LV_OBJ_FLAG_HIDDEN);
-      }
+      const float kwh = value * seconds / 3600.0f;
+      if (s == 2) result[s][value >= 0 ? 0 : 1] += std::fabs(kwh);  // grid import, export
+      else if (s == 1) result[s][value >= 0 ? 1 : 0] += std::fabs(kwh);  // battery charge, discharge
+      else result[s][0] += std::max(0.0f, kwh);
     }
-    if (selected_ >= 0 && selected_ < d.points && d.points > 0) {
-      const int x = chart_x_ + (selected_ * 2 + 1) * chart_w_ / (d.points * 2);
-      lv_point_precise_t line[2] = {{x, chart_y_}, {x, chart_y_ + chart_h_}};
-      lv_line_set_points(selected_line_, line, 2);
-      lv_obj_clear_flag(selected_line_, LV_OBJ_FLAG_HIDDEN);
-    }
-    generation_ = d.generation;
-    if (selected_ < 0) update_values(-1, tessera::epoch());
   }
 
-  void update_live_slot() {
-    redraw();
+  void refresh(uint32_t epoch) {
+    const FlowData &d = plugin_->data();
+    ui::set_text(title_, plugin_->text("title"));
+    ui::set_text(mode_text_, plugin_->text(daily_ ? "daily" : "live"));
+    const int map_series[SERIES] = {0, 2, 3, 1, 4};
+    if (daily_) {
+      float total[SERIES][2]{};
+      totals(total, epoch);
+      char text[SERIES][48];
+      bool has_history = false;
+      for (int s = 0; s < SERIES; s++)
+        for (int i = 0; i < d.points; i++) has_history = has_history || std::isfinite(d.values[s][i]);
+      if (!has_history) {
+        for (auto &line : text) std::snprintf(line, sizeof(line), "--");
+      } else {
+        std::snprintf(text[NODE_SOLAR], sizeof(text[0]), "%.1f kWh", total[0][0]);
+        std::snprintf(text[NODE_GRID], sizeof(text[0]), "IN %.1f\nOUT %.1f", total[2][0], total[2][1]);
+        std::snprintf(text[NODE_HOME], sizeof(text[0]), "%.1f kWh", total[3][0]);
+        std::snprintf(text[NODE_BATTERY], sizeof(text[0]), "CHG %.1f\nDIS %.1f", total[1][0], total[1][1]);
+        std::snprintf(text[NODE_CAR], sizeof(text[0]), "%.1f kWh", total[4][0]);
+      }
+      for (int n = 0; n < SERIES; n++) ui::set_text(values_[n], text[n]);
+      if (d.history_error) ui::set_text(status_, plugin_->text("no_history"));
+      else if (!has_history) ui::set_text(status_, plugin_->text("loading_history"));
+      else ui::set_text(status_, plugin_->text("daily_hint"));
+    } else {
+      for (int n = 0; n < SERIES; n++) {
+        const int s = map_series[n];
+        char text[48];
+        if (!d.current_ok[s]) std::snprintf(text, sizeof(text), "--");
+        else if (s == 2) std::snprintf(text, sizeof(text), "%s\n%.2f kW", d.current[s] < 0 ? "OUT" : "IN", std::fabs(d.current[s]));
+        else if (s == 1) std::snprintf(text, sizeof(text), "%s\n%.2f kW", d.current[s] < 0 ? "CHG" : "DIS", std::fabs(d.current[s]));
+        else std::snprintf(text, sizeof(text), "%.2f kW", std::max(0.0f, d.current[s]));
+        ui::set_text(values_[n], text);
+      }
+      if (d.history_error) ui::set_text(status_, plugin_->text("no_history"));
+      else ui::set_text(status_, plugin_->text("live_hint"));
+    }
+    update_flows(epoch);
+  }
+
+  void update_flows(uint32_t epoch) {
+    const FlowData &d = plugin_->data();
+    const float values[4] = {d.current[0], d.current[2], d.current[1], d.current[4]};
+    const bool valid[4] = {d.current_ok[0], d.current_ok[2], d.current_ok[1], d.current_ok[4]};
+    const int source[4] = {NODE_SOLAR, NODE_GRID, NODE_BATTERY, NODE_HOME};
+    const int dest[4] = {NODE_HOME, NODE_HOME, NODE_HOME, NODE_CAR};
+    const bool active[4] = {valid[0] && values[0] > 0.01f, valid[1] && std::fabs(values[1]) > 0.01f,
+                            valid[2] && std::fabs(values[2]) > 0.01f, valid[3] && values[3] > 0.01f};
+    for (int i = 0; i < 4; i++) {
+      const int x0 = centers_[source[i]].x, y0 = centers_[source[i]].y;
+      const int x1 = centers_[dest[i]].x, y1 = centers_[dest[i]].y;
+      const bool reverse = (i == 1 && values[i] < 0) || (i == 2 && values[i] < 0);
+      const float phase = std::fmod((epoch % 4) / 4.0f + i * 0.19f, 1.0f);
+      const float p = reverse ? 1.0f - phase : phase;
+      lv_obj_set_pos(dots_[i], static_cast<int>(x0 + (x1 - x0) * p) - ui::px(4),
+                     static_cast<int>(y0 + (y1 - y0) * p) - ui::px(4));
+      const uint32_t color = i == 1 && values[i] < 0 ? 0xEA788F : i == 2 && values[i] < 0 ? 0x43D9D0
+                               : NODE_COLORS[i == 0 ? NODE_SOLAR : i == 1 ? NODE_GRID : i == 2 ? NODE_BATTERY : NODE_CAR];
+      lv_obj_set_style_line_color(connectors_[i], lv_color_hex(color), 0);
+      lv_obj_set_style_bg_color(dots_[i], lv_color_hex(color), 0);
+      if (!daily_ && active[i]) lv_obj_clear_flag(dots_[i], LV_OBJ_FLAG_HIDDEN);
+      else lv_obj_add_flag(dots_[i], LV_OBJ_FLAG_HIDDEN);
+    }
   }
 
   SigenFlow *plugin_;
-  lv_obj_t *title_{}, *time_{}, *names_[SERIES]{}, *values_[SERIES]{}, *axis_[4]{}, *status_{}, *selected_line_{};
-  lv_obj_t *grid_[4]{}, *vertical_grid_[4]{}, *series_line_[SERIES]{};
-  lv_point_precise_t grid_points_[4][2]{}, vertical_points_[4][2]{}, series_points_[SERIES][MAX_POINTS]{};
-  int width_ = 0, height_ = 0, chart_x_ = 0, chart_y_ = 0, chart_w_ = 0, chart_h_ = 0;
-  int selected_ = -1, ready_points_ = 0;
-  uint32_t generation_ = 0, day_seen_ = 0;
-  bool compact_ = false;
+  lv_obj_t *title_{}, *mode_pill_{}, *mode_text_{}, *status_{};
+  lv_obj_t *circles_[SERIES]{}, *icon_[SERIES]{}, *names_[SERIES]{}, *values_[SERIES]{};
+  lv_obj_t *connectors_[SERIES]{}, *dots_[SERIES]{};
+  lv_point_precise_t connector_points_[SERIES][2]{};
+  tessera::Point centers_[SERIES]{};
+  int width_ = 0, height_ = 0, home_d_ = 0;
+  uint32_t day_seen_ = 0;
+  bool daily_ = false;
 };
 
 void SigenFlow::setup() {
