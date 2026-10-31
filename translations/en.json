@@ -14,10 +14,13 @@
     "home": "Home sensor",
     "home_hint": "Select the home load power sensor.",
     "car": "Car charging sensor",
-    "car_hint": "Select the EV or DC charger power sensor."
+    "car_hint": "Select the EV or DC charger power sensor.",
+    "price": "Current electricity price",
+    "price_hint": "Select a numeric price sensor in SEK per kWh, such as Nord Pool Aktuellt pris."
   },
   "screen": {
     "title": "ENERGY FLOW",
+    "price": "PRICE",
     "live": "LIVE",
     "daily": "TODAY",
     "loading_history": "Loading today's Home Assistant statistics…",
