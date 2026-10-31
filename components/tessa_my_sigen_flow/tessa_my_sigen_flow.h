@@ -13,6 +13,7 @@ class SigenFlow : public Component, public tessera::Plugin {
   void on_message(JsonObjectConst message) override;
   void configure(uint32_t epoch);
   void update_sensor(uint8_t series, float value, const char *const entities[5], uint32_t epoch);
+  void update_price(float value);
   bool sample(uint32_t epoch);
   const FlowData &data() const;
 
