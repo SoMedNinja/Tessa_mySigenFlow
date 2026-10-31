@@ -31,6 +31,8 @@ struct FlowData {
   int points = 0;
   uint32_t generation = 0;
   bool history_error = false;
+  float price = 0;
+  bool price_ok = false;
 
   FlowData() {
     for (auto &series : values) {
@@ -129,6 +131,13 @@ void SigenFlow::update_sensor(uint8_t series, float value, const char *const ent
   flow_->generation++;
 }
 
+void SigenFlow::update_price(float value) {
+  if (!flow_) return;
+  flow_->price = value;
+  flow_->price_ok = std::isfinite(value);
+  flow_->generation++;
+}
+
 void SigenFlow::request_next() {
   if (!flow_ || request_id_ || !flow_->day_start || !jobs_) return;
   const uint8_t chunks = static_cast<uint8_t>((flow_->day_end - flow_->day_start + CHUNK_SECONDS - 1) / CHUNK_SECONDS);
@@ -223,10 +232,27 @@ class TodayTile : public tessera::Tile {
     width_ = c.width;
     height_ = c.height;
     plugin_->configure(tessera::epoch());
+    price_box_ = lv_obj_create(c.parent);
+    lv_obj_remove_style_all(price_box_);
+    lv_obj_remove_flag(price_box_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(price_box_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(price_box_, width_ * 45 / 100, ui::line_height(Font::HEADLINE));
+    lv_obj_set_pos(price_box_, 0, 0);
+    lv_obj_set_style_pad_all(price_box_, 0, 0);
+    lv_obj_set_style_radius(price_box_, ui::px(10), 0);
+    lv_obj_set_style_bg_color(price_box_, lv_color_hex(0x2B261F), 0);
+    lv_obj_set_style_bg_opa(price_box_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(price_box_, std::max(1, ui::px(1)), 0);
+    lv_obj_set_style_border_color(price_box_, lv_color_hex(0x725127), 0);
+    price_ = ui::label(price_box_, Font::BODY, theme::INK);
+    lv_obj_remove_flag(price_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_text_color(price_, lv_color_hex(0xFFC56E), 0);
+    lv_obj_set_size(price_, width_ * 45 / 100 - ui::px(12), ui::line_height(Font::HEADLINE));
+    lv_obj_set_pos(price_, ui::px(6), 0);
     title_ = ui::label(c.parent, Font::HEADLINE, theme::INK);
     lv_obj_remove_flag(title_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(title_, width_ * 2 / 3, ui::line_height(Font::HEADLINE));
-    lv_obj_set_pos(title_, 0, 0);
+    lv_obj_set_size(title_, width_ * 27 / 100, ui::line_height(Font::HEADLINE));
+    lv_obj_set_pos(title_, width_ * 47 / 100, 0);
 
     const int header_h = ui::line_height(Font::HEADLINE);
     mode_pill_ = lv_obj_create(c.parent);
@@ -372,6 +398,10 @@ class TodayTile : public tessera::Tile {
     const FlowData &d = plugin_->data();
     ui::set_text(title_, plugin_->text("title"));
     ui::set_text(mode_text_, plugin_->text(daily_ ? "daily" : "live"));
+    char price_text[48];
+    if (d.price_ok) std::snprintf(price_text, sizeof(price_text), "%s %.2f SEK/kWh", plugin_->text("price"), d.price);
+    else std::snprintf(price_text, sizeof(price_text), "%s -- SEK/kWh", plugin_->text("price"));
+    ui::set_text(price_, price_text);
     const int map_series[SERIES] = {0, 2, 3, 1, 4};
     if (daily_) {
       float total[SERIES][2]{};
@@ -435,7 +465,7 @@ class TodayTile : public tessera::Tile {
   }
 
   SigenFlow *plugin_;
-  lv_obj_t *title_{}, *mode_pill_{}, *mode_text_{}, *status_{};
+  lv_obj_t *title_{}, *price_box_{}, *price_{}, *mode_pill_{}, *mode_text_{}, *status_{};
   lv_obj_t *circles_[SERIES]{}, *icon_[SERIES]{}, *names_[SERIES]{}, *values_[SERIES]{};
   lv_obj_t *connectors_[SERIES]{}, *dots_[SERIES]{};
   lv_point_precise_t connector_points_[SERIES][2]{};
