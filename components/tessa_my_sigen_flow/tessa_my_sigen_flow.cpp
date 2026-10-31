@@ -492,7 +492,7 @@ class TodayTile : public tessera::Tile {
       }
       const float kwh = value * seconds / 3600.0f;
       if (s == 2) result[s][value >= 0 ? 0 : 1] += std::fabs(kwh);  // grid import, export
-      else if (s == 1) result[s][value >= 0 ? 1 : 0] += std::fabs(kwh);  // battery charge, discharge
+      else if (s == 1) result[s][value >= 0 ? 0 : 1] += std::fabs(kwh);  // battery charge, discharge
       else result[s][0] += std::max(0.0f, kwh);
     }
   }
@@ -551,8 +551,8 @@ class TodayTile : public tessera::Tile {
           else if (n == NODE_SOLAR) std::snprintf(text, sizeof(text), "S %.1f", std::max(0.0f, d.current[s]));
           else if (n == NODE_GRID) std::snprintf(text, sizeof(text), tiny_width ? "I%.1f/O%.1f" : "IN %.1f OUT %.1f", std::max(0.0f, grid), std::max(0.0f, -grid));
           else if (n == NODE_HOME) std::snprintf(text, sizeof(text), "H %.1f", std::max(0.0f, d.current[s]));
-          else if (n == NODE_BATTERY && d.battery_soc_ok) std::snprintf(text, sizeof(text), "%.0f%% C%.1f D%.1f", d.battery_soc, std::max(0.0f, -battery), std::max(0.0f, battery));
-          else if (n == NODE_BATTERY) std::snprintf(text, sizeof(text), "--%% C%.1f D%.1f", std::max(0.0f, -battery), std::max(0.0f, battery));
+          else if (n == NODE_BATTERY && d.battery_soc_ok) std::snprintf(text, sizeof(text), "%.0f%% C%.1f D%.1f", d.battery_soc, std::max(0.0f, battery), std::max(0.0f, -battery));
+          else if (n == NODE_BATTERY) std::snprintf(text, sizeof(text), "--%% C%.1f D%.1f", std::max(0.0f, battery), std::max(0.0f, -battery));
           else std::snprintf(text, sizeof(text), tiny_width ? "E %.1f" : "EV %.1f", std::max(0.0f, d.current[s]));
           ui::set_text(compact_values_[n], text);
         }
@@ -598,7 +598,7 @@ class TodayTile : public tessera::Tile {
         char text[48];
         if (!d.current_ok[s]) std::snprintf(text, sizeof(text), "--");
         else if (s == 2) std::snprintf(text, sizeof(text), "IN %.2f", std::max(0.0f, d.current[s]));
-        else if (s == 1) std::snprintf(text, sizeof(text), "CHG %.2f", std::max(0.0f, -d.current[s]));
+        else if (s == 1) std::snprintf(text, sizeof(text), "CHG %.2f", std::max(0.0f, d.current[s]));
         else std::snprintf(text, sizeof(text), "%.2f kW", std::max(0.0f, d.current[s]));
         ui::set_text(values_[n], text);
         if (n == NODE_GRID) {
@@ -609,7 +609,7 @@ class TodayTile : public tessera::Tile {
         } else if (n == NODE_BATTERY) {
           char discharge[32];
           if (!d.current_ok[s]) std::snprintf(discharge, sizeof(discharge), "--");
-          else std::snprintf(discharge, sizeof(discharge), "DIS %.2f", std::max(0.0f, d.current[s]));
+          else std::snprintf(discharge, sizeof(discharge), "DIS %.2f", std::max(0.0f, -d.current[s]));
           ui::set_text(secondary_[n], discharge);
         }
       }
@@ -626,12 +626,12 @@ class TodayTile : public tessera::Tile {
     const FlowData &d = plugin_->data();
     if (compact_layout_) return;
     const float solar = d.current_ok[0] ? std::max(0.0f, d.current[0]) : 0;
-    const float battery = d.current_ok[1] ? d.current[1] : 0;  // positive discharges, negative charges
+    const float battery = d.current_ok[1] ? d.current[1] : 0;  // positive charges, negative discharges
     const float grid = d.current_ok[2] ? d.current[2] : 0;      // positive imports, negative exports
     const float home = d.current_ok[3] ? std::max(0.0f, d.current[3]) : 0;
     const float car = d.current_ok[4] ? std::max(0.0f, d.current[4]) : 0;
-    const float charge = std::max(0.0f, -battery);
-    const float discharge = std::max(0.0f, battery);
+    const float charge = std::max(0.0f, battery);
+    const float discharge = std::max(0.0f, -battery);
     // Estimate source routing from the selected totals: solar surplus charges the battery first;
     // any remaining charge is attributed to grid import.
     const float solar_to_battery = std::min(charge, std::max(0.0f, solar - home));
