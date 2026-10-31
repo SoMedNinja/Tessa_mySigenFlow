@@ -4,6 +4,14 @@ tessa_my_sigen_flow:
 
 sensor:
   - platform: homeassistant
+    id: sigen_energy_price
+    entity_id: ${PRICE_ENTITY}
+    unit_of_measurement: SEK/kWh
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_price(x);
+  - platform: homeassistant
     id: sigen_solar_power
     entity_id: ${SOLAR_ENTITY}
     unit_of_measurement: W
