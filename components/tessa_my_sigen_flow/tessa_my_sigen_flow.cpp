@@ -13,6 +13,7 @@ using tessera::Font;
 namespace ui = tessera::ui;
 
 constexpr int SERIES = 5;
+constexpr int FLOWS = 7;
 constexpr int MAX_POINTS = 300;  // 25 hours on the day clocks go back, sampled every five minutes
 constexpr uint32_t SAMPLE_SECONDS = 300;
 constexpr uint32_t CHUNK_SECONDS = 6 * 3600;
@@ -33,8 +34,11 @@ struct FlowData {
   bool history_error = false;
   float price = 0;
   bool price_ok = false;
+  float battery_soc = 0;
+  bool battery_soc_ok = false;
 
   FlowData() {
+    for (int i = 0; i < SERIES; i++) std::snprintf(unit[i], sizeof(unit[i]), "W");
     for (auto &series : values) {
       series.resize(MAX_POINTS);
       for (int i = 0; i < MAX_POINTS; i++) series[i] = NAN;
@@ -64,10 +68,14 @@ static bool parse_number(JsonVariantConst v, float &out) {
   return end != text && *end == 0 && std::isfinite(out);
 }
 
+static float kw_factor(const char *unit) {
+  if (std::strcmp(unit, "W") == 0 || std::strcmp(unit, "w") == 0) return 0.001f;
+  if (std::strcmp(unit, "MW") == 0) return 1000.0f;
+  return 1.0f;  // kW is the Home Assistant default when a unit is not provided
+}
+
 static float to_kw(float value, const char *unit) {
-  if (std::strcmp(unit, "W") == 0 || std::strcmp(unit, "w") == 0) return value / 1000.0f;
-  if (std::strcmp(unit, "MW") == 0) return value * 1000.0f;
-  return value;
+  return value * kw_factor(unit);
 }
 
 static void iso_time(uint32_t epoch, char out[24]) {
@@ -123,11 +131,21 @@ void SigenFlow::update_sensor(uint8_t series, float value, const char *const ent
   } else {
     configure(epoch);
   }
-  flow_->unit[series][0] = 'W';
-  flow_->unit[series][1] = 0;
   flow_->current[series] = to_kw(value, flow_->unit[series]);
   flow_->current_ok[series] = std::isfinite(flow_->current[series]);
   flow_->name[series][0] = 0;
+  flow_->generation++;
+}
+
+void SigenFlow::update_unit(uint8_t series, const char *unit) {
+  if (!flow_ || series >= SERIES || !unit || !unit[0] || std::strcmp(flow_->unit[series], unit) == 0) return;
+  const float old_factor = kw_factor(flow_->unit[series]);
+  const float ratio = kw_factor(unit) / old_factor;
+  std::snprintf(flow_->unit[series], sizeof(flow_->unit[series]), "%s", unit);
+  flow_->current[series] *= ratio;
+  flow_->live_sum[series] *= ratio;
+  for (int i = 0; i < flow_->points; i++)
+    if (std::isfinite(flow_->values[series][i])) flow_->values[series][i] *= ratio;
   flow_->generation++;
 }
 
@@ -135,6 +153,13 @@ void SigenFlow::update_price(float value) {
   if (!flow_) return;
   flow_->price = value;
   flow_->price_ok = std::isfinite(value);
+  flow_->generation++;
+}
+
+void SigenFlow::update_battery_soc(float value) {
+  if (!flow_) return;
+  flow_->battery_soc = value;
+  flow_->battery_soc_ok = std::isfinite(value);
   flow_->generation++;
 }
 
@@ -221,8 +246,9 @@ bool SigenFlow::sample(uint32_t epoch) {
 }
 
 constexpr int NODE_SOLAR = 0, NODE_GRID = 1, NODE_HOME = 2, NODE_BATTERY = 3, NODE_CAR = 4;
-constexpr uint32_t NODE_COLORS[SERIES] = {0xFF9D22, 0xA884E8, 0xFF9D22, 0xEC5B9A, 0x48D4D4};
+constexpr uint32_t NODE_COLORS[SERIES] = {0xF2A23A, 0xA884E8, 0xF2A23A, 0xE9759D, 0x52C7C5};
 constexpr uint32_t NODE_ICONS[SERIES] = {0xF0A72, 0xF0D3E, 0xF02DC, 0xF1901, 0xF0B6C};
+constexpr uint32_t FLOW_COLORS[FLOWS] = {0xF2A23A, 0xE9759D, 0xA884E8, 0xA884E8, 0xE9759D, 0x52C7C5, 0x62B8D8};
 
 class TodayTile : public tessera::Tile {
  public:
@@ -231,7 +257,7 @@ class TodayTile : public tessera::Tile {
   void create(const tessera::TileContext &c) override {
     width_ = c.width;
     height_ = c.height;
-    compact_layout_ = width_ < ui::px(520) || height_ < ui::px(220);
+    compact_layout_ = width_ < ui::px(560) || height_ < ui::px(300);
     plugin_->configure(tessera::epoch());
     price_box_ = lv_obj_create(c.parent);
     lv_obj_remove_style_all(price_box_);
@@ -280,10 +306,13 @@ class TodayTile : public tessera::Tile {
     const int header_bottom = header_h + ui::px(8);
     const int footer_top = height_ - body_h - ui::px(2);
     if (compact_layout_) {
-      const int cols = width_ < ui::px(520) ? 3 : 5;
+      // Keep compact tiles readable: use two wider columns on a 1-column tile,
+      // three columns on a medium tile, and all five metrics when there is room.
+      const int cols = width_ < ui::px(280) ? 2 : (width_ < ui::px(520) ? 3 : 5);
       const int rows = (SERIES + cols - 1) / cols;
       const int card_top = header_bottom;
-      const int card_bottom = footer_top - body_h - ui::px(2);
+      const bool tiny_height = height_ < ui::px(160);
+      const int card_bottom = tiny_height ? footer_top : footer_top - body_h - ui::px(2);
       const int row_h = std::max(body_h, (card_bottom - card_top) / rows);
       const int gap = width_ < ui::px(280) ? ui::px(1) : ui::px(3);
       for (int n = 0; n < SERIES; n++) {
@@ -310,16 +339,18 @@ class TodayTile : public tessera::Tile {
         lv_obj_set_size(compact_values_[n], card_w - gap, card_h);
         lv_obj_set_pos(compact_values_[n], gap / 2, 0);
       }
-      compact_status_ = ui::label(c.parent, Font::BODY, theme::SUBTLE);
-      lv_obj_remove_flag(compact_status_, LV_OBJ_FLAG_CLICKABLE);
-      lv_obj_set_size(compact_status_, width_, body_h);
-      lv_obj_set_style_text_align(compact_status_, LV_TEXT_ALIGN_CENTER, 0);
-      lv_obj_set_pos(compact_status_, 0, footer_top);
+      if (!tiny_height) {
+        compact_status_ = ui::label(c.parent, Font::BODY, theme::SUBTLE);
+        lv_obj_remove_flag(compact_status_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_size(compact_status_, width_, body_h);
+        lv_obj_set_style_text_align(compact_status_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_pos(compact_status_, 0, footer_top);
+      }
       day_seen_ = plugin_->data().day_start;
       refresh(tessera::epoch());
       return;
     }
-    const int outer_d = std::min({ui::px(88), width_ / 7, (footer_top - header_bottom) / 3});
+    const int outer_d = std::min({ui::px(96), width_ / 6, (footer_top - header_bottom) / 3});
     compact_nodes_ = outer_d < ui::px(76);
     home_d_ = outer_d + ui::px(12);
     const int source_x = width_ * 32 / 100;
@@ -335,14 +366,13 @@ class TodayTile : public tessera::Tile {
     centers_[NODE_BATTERY] = {source_x, bottom_y};
     centers_[NODE_CAR] = {right_x, middle_y};
 
-    const int from_node[4] = {NODE_SOLAR, NODE_GRID, NODE_BATTERY, NODE_HOME};
-    const int to_node[4] = {NODE_HOME, NODE_HOME, NODE_HOME, NODE_CAR};
-    const int connector_colors[4] = {NODE_SOLAR, NODE_GRID, NODE_BATTERY, NODE_CAR};
-    for (int i = 0; i < 4; i++) {
+    const int from_node[FLOWS] = {NODE_SOLAR, NODE_SOLAR, NODE_GRID, NODE_GRID, NODE_BATTERY, NODE_HOME, NODE_HOME};
+    const int to_node[FLOWS] = {NODE_HOME, NODE_BATTERY, NODE_HOME, NODE_BATTERY, NODE_HOME, NODE_CAR, NODE_GRID};
+    for (int i = 0; i < FLOWS; i++) {
       connectors_[i] = lv_line_create(c.parent);
       lv_obj_remove_flag(connectors_[i], LV_OBJ_FLAG_CLICKABLE);
       lv_obj_set_style_line_width(connectors_[i], std::max(1, ui::px(2)), 0);
-      lv_obj_set_style_line_color(connectors_[i], lv_color_hex(NODE_COLORS[connector_colors[i]]), 0);
+      lv_obj_set_style_line_color(connectors_[i], lv_color_hex(FLOW_COLORS[i]), 0);
       connector_points_[i][0] = {centers_[from_node[i]].x, centers_[from_node[i]].y};
       connector_points_[i][1] = {centers_[to_node[i]].x, centers_[to_node[i]].y};
       lv_line_set_points(connectors_[i], connector_points_[i], 2);
@@ -353,7 +383,7 @@ class TodayTile : public tessera::Tile {
       lv_obj_set_size(dots_[i], ui::px(8), ui::px(8));
       lv_obj_set_style_radius(dots_[i], LV_RADIUS_CIRCLE, 0);
       lv_obj_set_style_border_width(dots_[i], 0, 0);
-      lv_obj_set_style_bg_color(dots_[i], lv_color_hex(NODE_COLORS[connector_colors[i]]), 0);
+      lv_obj_set_style_bg_color(dots_[i], lv_color_hex(FLOW_COLORS[i]), 0);
       lv_obj_set_style_bg_opa(dots_[i], LV_OPA_COVER, 0);
     }
 
@@ -378,12 +408,40 @@ class TodayTile : public tessera::Tile {
       ui::set_text(icon_[n], ui::icon(badge_icons[n]));
       const int icon_h = ui::line_height(Font::ICON);
       lv_obj_set_size(icon_[n], d - ui::px(12), icon_h);
-      lv_obj_set_pos(icon_[n], ui::px(6), d / 2 - icon_h / 2 - ui::px(8));
+      if (n == NODE_BATTERY) {
+        lv_obj_set_pos(icon_[n], ui::px(6), body_h + ui::px(1));
+        soc_ = ui::label(circles_[n], Font::BODY, theme::INK);
+        lv_obj_remove_flag(soc_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_text_align(soc_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_size(soc_, d - ui::px(10), body_h);
+        lv_obj_set_pos(soc_, ui::px(5), ui::px(1));
+      } else if (n == NODE_GRID) {
+        lv_obj_set_pos(icon_[n], ui::px(6), ui::px(7));
+      } else {
+        lv_obj_set_pos(icon_[n], ui::px(6), d / 4 - icon_h / 2);
+      }
+      if (compact_nodes_) lv_obj_add_flag(icon_[n], LV_OBJ_FLAG_HIDDEN);
       values_[n] = ui::label(circles_[n], Font::BODY, theme::INK);
       lv_obj_remove_flag(values_[n], LV_OBJ_FLAG_CLICKABLE);
       lv_obj_set_style_text_align(values_[n], LV_TEXT_ALIGN_CENTER, 0);
-      lv_obj_set_size(values_[n], d - ui::px(10), compact_nodes_ ? body_h : 2 * body_h);
-      lv_obj_set_pos(values_[n], ui::px(5), d / 2 + ui::px(2));
+      lv_obj_set_size(values_[n], d - ui::px(10), body_h);
+      const bool directional = n == NODE_GRID || n == NODE_BATTERY;
+      const int value_y = directional ? d - 2 * body_h - ui::px(2) : d / 2 + ui::px(1);
+      lv_obj_set_pos(values_[n], ui::px(5), value_y);
+      if (directional) {
+        secondary_[n] = ui::label(circles_[n], Font::BODY, theme::INK);
+        lv_obj_remove_flag(secondary_[n], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_text_align(secondary_[n], LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_size(secondary_[n], d - ui::px(10), body_h);
+        lv_obj_set_pos(secondary_[n], ui::px(5), value_y + body_h);
+      }
+      if (n == NODE_GRID) {
+        lv_obj_set_style_text_color(values_[n], lv_color_hex(0xB99BEA), 0);
+        lv_obj_set_style_text_color(secondary_[n], lv_color_hex(0x62B8D8), 0);
+      } else if (n == NODE_BATTERY) {
+        lv_obj_set_style_text_color(values_[n], lv_color_hex(0xE9759D), 0);
+        lv_obj_set_style_text_color(secondary_[n], lv_color_hex(0x52C7C5), 0);
+      }
       names_[n] = ui::label(c.parent, Font::BODY, theme::MUTED);
       lv_obj_remove_flag(names_[n], LV_OBJ_FLAG_CLICKABLE);
       lv_obj_set_style_text_align(names_[n], LV_TEXT_ALIGN_CENTER, 0);
@@ -442,7 +500,7 @@ class TodayTile : public tessera::Tile {
   void refresh(uint32_t epoch) {
     const FlowData &d = plugin_->data();
     ui::set_text(title_, plugin_->text("title"));
-    ui::set_text(mode_text_, plugin_->text(daily_ ? "daily" : "live"));
+    ui::set_text(mode_text_, plugin_->text(compact_layout_ ? (daily_ ? "daily_compact" : "live_compact") : (daily_ ? "daily" : "live")));
     char price_text[48];
     if (compact_layout_) {
       if (d.price_ok) std::snprintf(price_text, sizeof(price_text), "%.2f SEK/kWh", d.price);
@@ -452,6 +510,7 @@ class TodayTile : public tessera::Tile {
     ui::set_text(price_, price_text);
     const int map_series[SERIES] = {0, 2, 3, 1, 4};
     if (compact_layout_) {
+      const bool tiny_width = width_ < ui::px(280);
       if (daily_) {
         float total[SERIES][2]{};
         totals(total, epoch);
@@ -460,34 +519,47 @@ class TodayTile : public tessera::Tile {
           for (int i = 0; i < d.points; i++) has_history = has_history || std::isfinite(d.values[s][i]);
         if (!has_history) {
           for (int n = 0; n < SERIES; n++) ui::set_text(compact_values_[n], "--");
+          char battery_text[32];
+          if (d.battery_soc_ok) std::snprintf(battery_text, sizeof(battery_text), "%.0f%% C-- D--", d.battery_soc);
+          else std::snprintf(battery_text, sizeof(battery_text), "--%% C-- D--");
+          ui::set_text(compact_values_[NODE_BATTERY], battery_text);
         } else {
           char text[48];
           std::snprintf(text, sizeof(text), "S %.1f", total[0][0]);
           ui::set_text(compact_values_[NODE_SOLAR], text);
-          std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "G%.1f/%.1f" : "G %.1f/%.1f", total[2][0], total[2][1]);
+          std::snprintf(text, sizeof(text), tiny_width ? "I%.1f/O%.1f" : "IN %.1f OUT %.1f", total[2][0], total[2][1]);
           ui::set_text(compact_values_[NODE_GRID], text);
           std::snprintf(text, sizeof(text), "H %.1f", total[3][0]);
           ui::set_text(compact_values_[NODE_HOME], text);
-          std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "B%.1f/%.1f" : "B %.1f/%.1f", total[1][0], total[1][1]);
+          if (d.battery_soc_ok) std::snprintf(text, sizeof(text), tiny_width ? "%.0f%% C%.1f D%.1f" : "%.0f%% C%.1f D%.1f", d.battery_soc, total[1][0], total[1][1]);
+          else std::snprintf(text, sizeof(text), "--%% C%.1f D%.1f", total[1][0], total[1][1]);
           ui::set_text(compact_values_[NODE_BATTERY], text);
-          std::snprintf(text, sizeof(text), "EV %.1f", total[4][0]);
+          std::snprintf(text, sizeof(text), tiny_width ? "E %.1f" : "EV %.1f", total[4][0]);
           ui::set_text(compact_values_[NODE_CAR], text);
         }
-        if (d.history_error) ui::set_text(compact_status_, plugin_->text("no_history"));
-        else ui::set_text(compact_status_, plugin_->text("compact_daily_status"));
+        if (compact_status_) {
+          if (d.history_error) ui::set_text(compact_status_, plugin_->text("no_history"));
+          else ui::set_text(compact_status_, plugin_->text("compact_daily_status"));
+        }
       } else {
+        const float grid = d.current_ok[2] ? d.current[2] : 0;
+        const float battery = d.current_ok[1] ? d.current[1] : 0;
         for (int n = 0; n < SERIES; n++) {
           const int s = map_series[n];
-          char text[32];
+          char text[48];
           if (!d.current_ok[s]) std::snprintf(text, sizeof(text), "--");
-          else if (s == 2) std::snprintf(text, sizeof(text), "G%c%.1f", d.current[s] < 0 ? '-' : '+', std::fabs(d.current[s]));
-          else if (s == 1) std::snprintf(text, sizeof(text), "B%c%.1f", d.current[s] < 0 ? '-' : '+', std::fabs(d.current[s]));
-          else if (n == NODE_CAR) std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "E%.1f" : "EV %.1f", std::max(0.0f, d.current[s]));
-          else std::snprintf(text, sizeof(text), width_ < ui::px(280) ? "%c%.1f" : "%c %.1f", n == NODE_SOLAR ? 'S' : 'H', std::max(0.0f, d.current[s]));
+          else if (n == NODE_SOLAR) std::snprintf(text, sizeof(text), "S %.1f", std::max(0.0f, d.current[s]));
+          else if (n == NODE_GRID) std::snprintf(text, sizeof(text), tiny_width ? "I%.1f/O%.1f" : "IN %.1f OUT %.1f", std::max(0.0f, grid), std::max(0.0f, -grid));
+          else if (n == NODE_HOME) std::snprintf(text, sizeof(text), "H %.1f", std::max(0.0f, d.current[s]));
+          else if (n == NODE_BATTERY && d.battery_soc_ok) std::snprintf(text, sizeof(text), "%.0f%% C%.1f D%.1f", d.battery_soc, std::max(0.0f, -battery), std::max(0.0f, battery));
+          else if (n == NODE_BATTERY) std::snprintf(text, sizeof(text), "--%% C%.1f D%.1f", std::max(0.0f, -battery), std::max(0.0f, battery));
+          else std::snprintf(text, sizeof(text), tiny_width ? "E %.1f" : "EV %.1f", std::max(0.0f, d.current[s]));
           ui::set_text(compact_values_[n], text);
         }
-        if (d.history_error) ui::set_text(compact_status_, plugin_->text("no_history"));
-        else ui::set_text(compact_status_, plugin_->text("compact_live_status"));
+        if (compact_status_) {
+          if (d.history_error) ui::set_text(compact_status_, plugin_->text("no_history"));
+          else ui::set_text(compact_status_, plugin_->text("compact_live_status"));
+        }
       }
       return;
     }
@@ -500,22 +572,23 @@ class TodayTile : public tessera::Tile {
         for (int i = 0; i < d.points; i++) has_history = has_history || std::isfinite(d.values[s][i]);
       if (!has_history) {
         for (auto &line : text) std::snprintf(line, sizeof(line), "--");
+        ui::set_text(secondary_[NODE_GRID], "--");
+        ui::set_text(secondary_[NODE_BATTERY], "--");
       } else {
-        if (compact_nodes_) {
-          std::snprintf(text[NODE_SOLAR], sizeof(text[0]), "%.1f", total[0][0]);
-          std::snprintf(text[NODE_GRID], sizeof(text[0]), "%.1f/%.1f", total[2][0], total[2][1]);
-          std::snprintf(text[NODE_HOME], sizeof(text[0]), "%.1f", total[3][0]);
-          std::snprintf(text[NODE_BATTERY], sizeof(text[0]), "%.1f/%.1f", total[1][0], total[1][1]);
-          std::snprintf(text[NODE_CAR], sizeof(text[0]), "%.1f", total[4][0]);
-        } else {
-          std::snprintf(text[NODE_SOLAR], sizeof(text[0]), "%.1f kWh", total[0][0]);
-          std::snprintf(text[NODE_GRID], sizeof(text[0]), "IN %.1f\nOUT %.1f", total[2][0], total[2][1]);
-          std::snprintf(text[NODE_HOME], sizeof(text[0]), "%.1f kWh", total[3][0]);
-          std::snprintf(text[NODE_BATTERY], sizeof(text[0]), "CHG %.1f\nDIS %.1f", total[1][0], total[1][1]);
-          std::snprintf(text[NODE_CAR], sizeof(text[0]), "%.1f kWh", total[4][0]);
-        }
+        std::snprintf(text[NODE_SOLAR], sizeof(text[0]), "%.1f kWh", total[0][0]);
+        std::snprintf(text[NODE_GRID], sizeof(text[0]), "IN %.1f", total[2][0]);
+        std::snprintf(text[NODE_HOME], sizeof(text[0]), "%.1f kWh", total[3][0]);
+        std::snprintf(text[NODE_BATTERY], sizeof(text[0]), "CHG %.1f", total[1][0]);
+        std::snprintf(text[NODE_CAR], sizeof(text[0]), "%.1f kWh", total[4][0]);
+        std::snprintf(price_text, sizeof(price_text), "OUT %.1f", total[2][1]);
+        ui::set_text(secondary_[NODE_GRID], price_text);
+        std::snprintf(price_text, sizeof(price_text), "DIS %.1f", total[1][1]);
+        ui::set_text(secondary_[NODE_BATTERY], price_text);
       }
       for (int n = 0; n < SERIES; n++) ui::set_text(values_[n], text[n]);
+      if (d.battery_soc_ok) std::snprintf(price_text, sizeof(price_text), "%.0f%%", d.battery_soc);
+      else std::snprintf(price_text, sizeof(price_text), "--%%");
+      ui::set_text(soc_, price_text);
       if (d.history_error) ui::set_text(status_, plugin_->text("no_history"));
       else if (!has_history) ui::set_text(status_, plugin_->text("loading_history"));
       else ui::set_text(status_, plugin_->text(compact_nodes_ ? "daily_hint_compact" : "daily_hint"));
@@ -524,14 +597,25 @@ class TodayTile : public tessera::Tile {
         const int s = map_series[n];
         char text[48];
         if (!d.current_ok[s]) std::snprintf(text, sizeof(text), "--");
-        else if (s == 2 && compact_nodes_) std::snprintf(text, sizeof(text), "%c %.1f", d.current[s] < 0 ? 'O' : 'I', std::fabs(d.current[s]));
-        else if (s == 1 && compact_nodes_) std::snprintf(text, sizeof(text), "%c %.1f", d.current[s] < 0 ? 'C' : 'D', std::fabs(d.current[s]));
-        else if (s == 2) std::snprintf(text, sizeof(text), "%s\n%.2f kW", d.current[s] < 0 ? "OUT" : "IN", std::fabs(d.current[s]));
-        else if (s == 1) std::snprintf(text, sizeof(text), "%s\n%.2f kW", d.current[s] < 0 ? "CHG" : "DIS", std::fabs(d.current[s]));
-        else if (compact_nodes_) std::snprintf(text, sizeof(text), "%.1f", std::max(0.0f, d.current[s]));
+        else if (s == 2) std::snprintf(text, sizeof(text), "IN %.2f", std::max(0.0f, d.current[s]));
+        else if (s == 1) std::snprintf(text, sizeof(text), "CHG %.2f", std::max(0.0f, -d.current[s]));
         else std::snprintf(text, sizeof(text), "%.2f kW", std::max(0.0f, d.current[s]));
         ui::set_text(values_[n], text);
+        if (n == NODE_GRID) {
+          char out[32];
+          if (!d.current_ok[s]) std::snprintf(out, sizeof(out), "--");
+          else std::snprintf(out, sizeof(out), "OUT %.2f", std::max(0.0f, -d.current[s]));
+          ui::set_text(secondary_[n], out);
+        } else if (n == NODE_BATTERY) {
+          char discharge[32];
+          if (!d.current_ok[s]) std::snprintf(discharge, sizeof(discharge), "--");
+          else std::snprintf(discharge, sizeof(discharge), "DIS %.2f", std::max(0.0f, d.current[s]));
+          ui::set_text(secondary_[n], discharge);
+        }
       }
+      if (d.battery_soc_ok) std::snprintf(price_text, sizeof(price_text), "%.0f%%", d.battery_soc);
+      else std::snprintf(price_text, sizeof(price_text), "--%%");
+      ui::set_text(soc_, price_text);
       if (d.history_error) ui::set_text(status_, plugin_->text("no_history"));
       else ui::set_text(status_, plugin_->text(compact_nodes_ ? "live_hint_compact" : "live_hint"));
     }
@@ -540,35 +624,42 @@ class TodayTile : public tessera::Tile {
 
   void update_flows(uint32_t epoch) {
     const FlowData &d = plugin_->data();
-    const float values[4] = {d.current[0], d.current[2], d.current[1], d.current[4]};
-    const bool valid[4] = {d.current_ok[0], d.current_ok[2], d.current_ok[1], d.current_ok[4]};
-    const int source[4] = {NODE_SOLAR, NODE_GRID, NODE_BATTERY, NODE_HOME};
-    const int dest[4] = {NODE_HOME, NODE_HOME, NODE_HOME, NODE_CAR};
-    const bool active[4] = {valid[0] && values[0] > 0.01f, valid[1] && std::fabs(values[1]) > 0.01f,
-                            valid[2] && std::fabs(values[2]) > 0.01f, valid[3] && values[3] > 0.01f};
-    for (int i = 0; i < 4; i++) {
+    if (compact_layout_) return;
+    const float solar = d.current_ok[0] ? std::max(0.0f, d.current[0]) : 0;
+    const float battery = d.current_ok[1] ? d.current[1] : 0;  // positive discharges, negative charges
+    const float grid = d.current_ok[2] ? d.current[2] : 0;      // positive imports, negative exports
+    const float home = d.current_ok[3] ? std::max(0.0f, d.current[3]) : 0;
+    const float car = d.current_ok[4] ? std::max(0.0f, d.current[4]) : 0;
+    const float charge = std::max(0.0f, -battery);
+    const float discharge = std::max(0.0f, battery);
+    // Estimate source routing from the selected totals: solar surplus charges the battery first;
+    // any remaining charge is attributed to grid import.
+    const float solar_to_battery = std::min(charge, std::max(0.0f, solar - home));
+    const float grid_to_battery = std::max(0.0f, charge - solar_to_battery);
+    const float flow[FLOWS] = {
+        std::max(0.0f, solar - solar_to_battery), solar_to_battery,
+        std::max(0.0f, std::max(0.0f, grid) - grid_to_battery), grid_to_battery,
+        discharge, car, std::max(0.0f, -grid)};
+    const int source[FLOWS] = {NODE_SOLAR, NODE_SOLAR, NODE_GRID, NODE_GRID, NODE_BATTERY, NODE_HOME, NODE_HOME};
+    const int dest[FLOWS] = {NODE_HOME, NODE_BATTERY, NODE_HOME, NODE_BATTERY, NODE_HOME, NODE_CAR, NODE_GRID};
+    for (int i = 0; i < FLOWS; i++) {
       const int x0 = centers_[source[i]].x, y0 = centers_[source[i]].y;
       const int x1 = centers_[dest[i]].x, y1 = centers_[dest[i]].y;
-      const bool reverse = (i == 1 && values[i] < 0) || (i == 2 && values[i] < 0);
-      const float phase = std::fmod((epoch % 4) / 4.0f + i * 0.19f, 1.0f);
-      const float p = reverse ? 1.0f - phase : phase;
+      const float phase = std::fmod((epoch % 4) / 4.0f + i * 0.13f, 1.0f);
+      const float p = phase;
       lv_obj_set_pos(dots_[i], static_cast<int>(x0 + (x1 - x0) * p) - ui::px(4),
                      static_cast<int>(y0 + (y1 - y0) * p) - ui::px(4));
-      const uint32_t color = i == 1 && values[i] < 0 ? 0xEA788F : i == 2 && values[i] < 0 ? 0x43D9D0
-                               : NODE_COLORS[i == 0 ? NODE_SOLAR : i == 1 ? NODE_GRID : i == 2 ? NODE_BATTERY : NODE_CAR];
-      lv_obj_set_style_line_color(connectors_[i], lv_color_hex(color), 0);
-      lv_obj_set_style_bg_color(dots_[i], lv_color_hex(color), 0);
-      if (!daily_ && active[i]) lv_obj_clear_flag(dots_[i], LV_OBJ_FLAG_HIDDEN);
+      if (!daily_ && flow[i] > 0.01f) lv_obj_clear_flag(dots_[i], LV_OBJ_FLAG_HIDDEN);
       else lv_obj_add_flag(dots_[i], LV_OBJ_FLAG_HIDDEN);
     }
   }
 
   SigenFlow *plugin_;
   lv_obj_t *title_{}, *price_box_{}, *price_{}, *mode_pill_{}, *mode_text_{}, *status_{}, *compact_status_{};
-  lv_obj_t *circles_[SERIES]{}, *icon_[SERIES]{}, *names_[SERIES]{}, *values_[SERIES]{};
+  lv_obj_t *circles_[SERIES]{}, *icon_[SERIES]{}, *names_[SERIES]{}, *values_[SERIES]{}, *secondary_[SERIES]{}, *soc_{};
   lv_obj_t *compact_cards_[SERIES]{}, *compact_values_[SERIES]{};
-  lv_obj_t *connectors_[SERIES]{}, *dots_[SERIES]{};
-  lv_point_precise_t connector_points_[SERIES][2]{};
+  lv_obj_t *connectors_[FLOWS]{}, *dots_[FLOWS]{};
+  lv_point_precise_t connector_points_[FLOWS][2]{};
   tessera::Point centers_[SERIES]{};
   int width_ = 0, height_ = 0, home_d_ = 0;
   uint32_t day_seen_ = 0;
