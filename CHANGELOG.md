@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+- Allow tile sizes from 2 × 1 through 3 × 3 and use a compact layout for short tiles.
+
 ## 0.1.6
 
 - Draw the timeline with LVGL line objects because the screen firmware disables the chart widget.
