@@ -1,4 +1,6 @@
 # Entity inputs are screen-level settings on Tessera versions before per-tile entity options.
+# Safe fallback lets existing screens build before the new optional SoC input is selected.
+defaults: { BATTERY_SOC_ENTITY: sensor.unconfigured_battery_soc }
 tessa_my_sigen_flow:
   id: sigen_flow
 
