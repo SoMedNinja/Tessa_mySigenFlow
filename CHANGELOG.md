@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Replace the price-like timeline with an interactive energy flow diagram inspired by Tessera's Energy card.
+- Add live and today's total modes for solar, grid, battery, home and car power.
+- Limit layouts to 3 × 2 or 3 × 3 tiles.
+
 ## 0.1.7
 
 - Allow tile sizes from 2 × 1 through 3 × 3 and use a compact layout for short tiles.
