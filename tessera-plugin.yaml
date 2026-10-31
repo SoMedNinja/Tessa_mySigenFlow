@@ -1,5 +1,5 @@
 id: tessa_my_sigen_flow
-version: 0.2.3
+version: 0.2.4
 api: "0.14"
 icon: solar-power
 maintainer: SoMedNinja
@@ -14,12 +14,13 @@ flash_kb: 24
 
 permissions:
   ha_commands: [recorder/statistics_during_period]
-  read_entities: ["{price_entity}", "{solar_entity}", "{battery_entity}", "{grid_entity}", "{home_entity}", "{car_entity}"]
+  read_entities: ["{price_entity}", "{solar_entity}", "{battery_entity}", "{battery_soc_entity}", "{grid_entity}", "{home_entity}", "{car_entity}"]
 
 inputs:
   - { id: price_entity, kind: entity, domains: [sensor], scope: screen, label: price, hint: price_hint }
   - { id: solar_entity, kind: entity, domains: [sensor], scope: screen, label: solar, hint: solar_hint }
   - { id: battery_entity, kind: entity, domains: [sensor], scope: screen, label: battery, hint: battery_hint }
+  - { id: battery_soc_entity, kind: entity, domains: [sensor], scope: screen, label: battery_soc, hint: battery_soc_hint }
   - { id: grid_entity, kind: entity, domains: [sensor], scope: screen, label: grid, hint: grid_hint }
   - { id: home_entity, kind: entity, domains: [sensor], scope: screen, label: home, hint: home_hint }
   - { id: car_entity, kind: entity, domains: [sensor], scope: screen, label: car, hint: car_hint }
