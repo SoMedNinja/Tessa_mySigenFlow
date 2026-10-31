@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Draw the timeline with LVGL line objects because the screen firmware disables the chart widget.
+- Fix the missing numeric parser and day rollover field reported by the firmware compiler.
+
 ## 0.1.5
 
 - Use LVGL chart range API available in the Tessera firmware toolchain.
