@@ -275,8 +275,8 @@ class TodayTile : public tessera::Tile {
     plugin_->configure(tessera::epoch());
     price_ = ui::label(c.parent, compact_layout_ ? Font::BODY : Font::HEADLINE, theme::INK);
     lv_obj_remove_flag(price_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_text_color(price_, lv_color_hex(0xE8EEF2), 0);
-    lv_obj_set_size(price_, width_ * (compact_layout_ ? 67 : 70) / 100, ui::line_height(Font::HEADLINE));
+    lv_obj_set_style_text_color(price_, theme::color(theme::INK), 0);
+    lv_obj_set_size(price_, width_ * (compact_layout_ ? 64 : 68) / 100, ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(price_, 0, 0);
     const Font title_font = width_ < ui::px(500) ? Font::BODY : Font::HEADLINE;
     title_ = ui::label(c.parent, title_font, theme::INK);
@@ -286,23 +286,29 @@ class TodayTile : public tessera::Tile {
     lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
 
     const int header_h = ui::line_height(Font::HEADLINE);
-    const int mode_w = width_ * (compact_layout_ ? 32 : 25) / 100;
+    const int mode_w = width_ * (compact_layout_ ? 35 : 29) / 100;
+    mode_h_ = header_h + ui::px(8);
     mode_pill_ = lv_obj_create(c.parent);
     lv_obj_remove_style_all(mode_pill_);
-    lv_obj_remove_flag(mode_pill_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(mode_pill_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(mode_pill_, mode_w, header_h);
-    lv_obj_set_pos(mode_pill_, width_ - mode_w, 0);
+    lv_obj_add_flag(mode_pill_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(mode_pill_, mode_w, mode_h_);
+    lv_obj_set_pos(mode_pill_, width_ - mode_w, -ui::px(2));
     lv_obj_set_style_pad_all(mode_pill_, 0, 0);
-    lv_obj_set_style_bg_color(mode_pill_, lv_color_hex(0x27413D), 0);
+    lv_obj_set_style_bg_color(mode_pill_, theme::color(theme::ACCENT), 0);
+    lv_obj_set_style_bg_color(mode_pill_, theme::color(theme::ACCENT_PRESSED), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(mode_pill_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mode_pill_, 0, 0);
-    lv_obj_set_style_radius(mode_pill_, header_h / 2, 0);
+    lv_obj_set_style_radius(mode_pill_, mode_h_ / 2, 0);
     mode_text_ = ui::label(mode_pill_, Font::BODY, theme::ON_ACCENT);
     lv_obj_remove_flag(mode_text_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(mode_text_, mode_w, header_h);
+    lv_obj_set_size(mode_text_, mode_w, mode_h_);
     lv_obj_set_style_text_align(mode_text_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(mode_text_, 0, 0);
+    lv_obj_add_event_cb(mode_pill_, [](lv_event_t *event) {
+      auto *tile = static_cast<TodayTile *>(lv_event_get_user_data(event));
+      tile->toggle_mode();
+    }, LV_EVENT_CLICKED, this);
 
     const int body_h = ui::line_height(Font::BODY);
     const int header_bottom = header_h + ui::px(8);
@@ -329,7 +335,7 @@ class TodayTile : public tessera::Tile {
         lv_obj_remove_flag(compact_cards_[n], LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_size(compact_cards_[n], card_w, card_h);
         lv_obj_set_pos(compact_cards_[n], col * cell_w + gap / 2, card_top + row * row_h);
-        lv_obj_set_style_bg_color(compact_cards_[n], lv_color_hex(0x242A30), 0);
+        lv_obj_set_style_bg_color(compact_cards_[n], theme::color(theme::CARD), 0);
         lv_obj_set_style_bg_opa(compact_cards_[n], LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(compact_cards_[n], lv_color_hex(NODE_COLORS[n]), 0);
         lv_obj_set_style_border_width(compact_cards_[n], std::max(1, ui::px(1)), 0);
@@ -337,7 +343,7 @@ class TodayTile : public tessera::Tile {
         compact_values_[n] = ui::label(compact_cards_[n], Font::BODY, theme::INK);
         lv_obj_remove_flag(compact_values_[n], LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_text_align(compact_values_[n], LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_color(compact_values_[n], lv_color_hex(NODE_COLORS[n]), 0);
+        ui::set_color(compact_values_[n], theme::INK);
         lv_obj_set_size(compact_values_[n], card_w - gap, card_h);
         lv_obj_set_pos(compact_values_[n], gap / 2, 0);
       }
@@ -411,7 +417,7 @@ class TodayTile : public tessera::Tile {
       lv_obj_set_size(circles_[n], d, d);
       lv_obj_set_pos(circles_[n], centers_[n].x - d / 2, centers_[n].y - d / 2);
       lv_obj_set_style_radius(circles_[n], LV_RADIUS_CIRCLE, 0);
-      lv_obj_set_style_bg_color(circles_[n], lv_color_hex(0x171B20), 0);
+      lv_obj_set_style_bg_color(circles_[n], theme::color(theme::CARD), 0);
       lv_obj_set_style_bg_opa(circles_[n], LV_OPA_COVER, 0);
       lv_obj_set_style_border_width(circles_[n], std::max(2, ui::px(2)), 0);
       lv_obj_set_style_border_color(circles_[n], lv_color_hex(NODE_COLORS[n]), 0);
@@ -449,11 +455,11 @@ class TodayTile : public tessera::Tile {
         lv_obj_set_pos(secondary_[n], ui::px(5), value_y + body_h);
       }
       if (n == NODE_GRID) {
-        lv_obj_set_style_text_color(values_[n], lv_color_hex(0xB99BEA), 0);
-        lv_obj_set_style_text_color(secondary_[n], lv_color_hex(0x62B8D8), 0);
+        ui::set_color(values_[n], theme::INK);
+        ui::set_color(secondary_[n], theme::MUTED);
       } else if (n == NODE_BATTERY) {
-        lv_obj_set_style_text_color(values_[n], lv_color_hex(0xE9759D), 0);
-        lv_obj_set_style_text_color(secondary_[n], lv_color_hex(0x52C7C5), 0);
+        ui::set_color(values_[n], theme::INK);
+        ui::set_color(secondary_[n], theme::MUTED);
       }
       names_[n] = ui::label(c.parent, Font::BODY, theme::MUTED);
       lv_obj_remove_flag(names_[n], LV_OBJ_FLAG_CLICKABLE);
@@ -485,12 +491,12 @@ class TodayTile : public tessera::Tile {
 
   void on_theme() override { refresh(tessera::epoch()); }
 
-  void on_tap() override {
+ private:
+  void toggle_mode() {
     daily_ = !daily_;
     refresh(tessera::epoch());
   }
 
- private:
   void totals(float result[SERIES][2], uint32_t epoch) const {
     const FlowData &d = plugin_->data();
     for (int s = 0; s < SERIES; s++) result[s][0] = result[s][1] = 0;
@@ -529,6 +535,22 @@ class TodayTile : public tessera::Tile {
   void refresh(uint32_t epoch) {
     const FlowData &d = plugin_->data();
     ui::set_text(title_, plugin_->text("title"));
+    ui::set_color(price_, theme::INK);
+    lv_obj_set_style_bg_color(mode_pill_, theme::color(theme::ACCENT), 0);
+    lv_obj_set_style_bg_color(mode_pill_, theme::color(theme::ACCENT_PRESSED), LV_STATE_PRESSED);
+    ui::set_color(mode_text_, theme::ON_ACCENT);
+    if (status_) ui::set_color(status_, theme::SUBTLE);
+    if (compact_status_) ui::set_color(compact_status_, theme::SUBTLE);
+    for (int n = 0; n < SERIES; n++) {
+      if (circles_[n]) lv_obj_set_style_bg_color(circles_[n], theme::color(theme::CARD), 0);
+      if (compact_cards_[n]) lv_obj_set_style_bg_color(compact_cards_[n], theme::color(theme::CARD), 0);
+      if (icon_[n]) ui::set_color(icon_[n], theme::INK);
+      if (names_[n]) ui::set_color(names_[n], theme::MUTED);
+      if (values_[n]) ui::set_color(values_[n], theme::INK);
+      if (secondary_[n]) ui::set_color(secondary_[n], theme::MUTED);
+      if (compact_values_[n]) ui::set_color(compact_values_[n], theme::INK);
+    }
+    if (soc_) ui::set_color(soc_, theme::INK);
     ui::set_text(mode_text_, plugin_->text(compact_layout_ ? (daily_ ? "daily_compact" : "live_compact") : (daily_ ? "daily" : "live")));
     char price_text[48];
     if (daily_) {
@@ -694,7 +716,7 @@ class TodayTile : public tessera::Tile {
   lv_obj_t *connectors_[FLOWS]{}, *dots_[FLOWS]{};
   lv_point_precise_t connector_points_[FLOWS][2]{};
   tessera::Point centers_[SERIES]{};
-  int width_ = 0, height_ = 0, home_d_ = 0;
+  int width_ = 0, height_ = 0, home_d_ = 0, mode_h_ = 0;
   uint32_t day_seen_ = 0;
   bool daily_ = false, compact_nodes_ = false, compact_layout_ = false;
 };
