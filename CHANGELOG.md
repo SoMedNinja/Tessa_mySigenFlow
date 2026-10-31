@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Resize the tile from 2 × 2 to 3 × 3 cells and condense the readings in smaller layouts.
+
 ## 0.2.1
 
 - Add a selected current price sensor and display its live SEK/kWh value in a highlighted header badge.
