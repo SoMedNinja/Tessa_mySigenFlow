@@ -29,6 +29,8 @@
     "live_hint_compact": "kW · I/O grid · D/C battery · tap for totals",
     "daily_hint": "Today · energy in kWh · tap to return to live power",
     "daily_hint_compact": "kWh · grid IN/OUT · battery CHG/DIS · tap for live",
+    "compact_live_status": "Live kW · tap for today's kWh totals",
+    "compact_daily_status": "Today kWh · grid IN/OUT · battery CHG/DIS · tap for live",
     "solar": "SOLAR",
     "battery": "BATTERY",
     "grid": "GRID",
