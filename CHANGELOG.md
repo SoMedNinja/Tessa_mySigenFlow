@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Allow resizing from 1 × 1 through 3 × 3 cells, with a compact layout for small tiles.
+
 ## 0.2.2
 
 - Resize the tile from 2 × 2 to 3 × 3 cells and condense the readings in smaller layouts.
