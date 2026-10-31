@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.7
+
+- Match the bubbles and price text to Tessera's light and dark themes for readable contrast.
+- Make the top-right Live/Today switch a larger, directly tappable button.
+- Keep bubble interiors on the screen's surface and preserve legible icon and reading contrast.
+
 ## 0.2.6
 
 - Stop flow lines at the bubble edges and use solid, clean bubble interiors.
