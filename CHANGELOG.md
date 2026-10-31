@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Separate grid import/export and battery charge/discharge readings; show battery state of charge.
+- Detect W, kW or MW sensor units and add estimated solar/grid charging paths to the battery.
+- Refine node spacing and colors to keep icons and values apart.
+
 ## 0.2.3
 
 - Allow resizing from 1 × 1 through 3 × 3 cells, with a compact layout for small tiles.
