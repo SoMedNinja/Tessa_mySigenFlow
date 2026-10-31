@@ -1,10 +1,10 @@
 {
   "_meta": { "name": "English" },
   "app": {
-    "name": "Tessa mySigen Flow",
-    "summary": "A touch-selectable Sigenergy power metrics graph for today.",
-    "tile_today": "Power metrics · Today",
-    "tile_example": "Solar, battery, grid, home and car charging",
+    "name": "Tessa mySigen Energy",
+    "summary": "A touch-toggle live and daily energy flow dashboard.",
+    "tile_today": "Energy flow",
+    "tile_example": "Live power flow and today's energy totals",
     "solar": "Solar sensor",
     "solar_hint": "Select the solar power sensor.",
     "battery": "Battery sensor",
@@ -17,12 +17,13 @@
     "car_hint": "Select the EV or DC charger power sensor."
   },
   "screen": {
-    "title": "POWER METRICS · TODAY",
+    "title": "ENERGY FLOW",
     "live": "LIVE",
+    "daily": "TODAY",
     "loading_history": "Loading today's Home Assistant statistics…",
     "no_history": "Recorder statistics unavailable for one or more sensors",
-    "today_hint": "Today · 5 min averages · tap the graph for values",
-    "selected_hint": "5 min mean · tap another point to inspect it",
+    "live_hint": "Live power · tap anywhere for today's totals",
+    "daily_hint": "Today · energy in kWh · tap to return to live power",
     "solar": "SOLAR",
     "battery": "BATTERY",
     "grid": "GRID",
