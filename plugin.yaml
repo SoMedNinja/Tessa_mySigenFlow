@@ -12,6 +12,14 @@ sensor:
       - lambda: |-
           id(sigen_flow).update_price(x);
   - platform: homeassistant
+    id: sigen_battery_soc
+    entity_id: ${BATTERY_SOC_ENTITY}
+    unit_of_measurement: "%"
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_battery_soc(x);
+  - platform: homeassistant
     id: sigen_solar_power
     entity_id: ${SOLAR_ENTITY}
     unit_of_measurement: W
@@ -56,3 +64,45 @@ sensor:
       - lambda: |-
           const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
           id(sigen_flow).update_sensor(4, x, entities, tessera::epoch());
+
+text_sensor:
+  - platform: homeassistant
+    id: sigen_solar_unit
+    entity_id: ${SOLAR_ENTITY}
+    attribute: unit_of_measurement
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_unit(0, x.c_str());
+  - platform: homeassistant
+    id: sigen_battery_unit
+    entity_id: ${BATTERY_ENTITY}
+    attribute: unit_of_measurement
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_unit(1, x.c_str());
+  - platform: homeassistant
+    id: sigen_grid_unit
+    entity_id: ${GRID_ENTITY}
+    attribute: unit_of_measurement
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_unit(2, x.c_str());
+  - platform: homeassistant
+    id: sigen_home_unit
+    entity_id: ${HOME_ENTITY}
+    attribute: unit_of_measurement
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_unit(3, x.c_str());
+  - platform: homeassistant
+    id: sigen_car_unit
+    entity_id: ${CAR_ENTITY}
+    attribute: unit_of_measurement
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_unit(4, x.c_str());
