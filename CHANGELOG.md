@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.5
+
+- Correct the Sigen battery sensor direction: positive is charging and negative is discharging.
+- Allow an initial build before a battery state-of-charge entity is selected.
+
 ## 0.2.4
 
 - Separate grid import/export and battery charge/discharge readings; show battery state of charge.
