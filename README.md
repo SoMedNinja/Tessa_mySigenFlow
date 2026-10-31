@@ -10,10 +10,12 @@ A native Tessera energy-flow tile inspired by Home Assistant's Energy view and t
 
 Tap anywhere on the tile to switch between **Live** power in kW and **Today** totals in kWh. In daily mode, grid import/export and battery charge/discharge are shown separately.
 
+The upper-left price badge shows the current value from a selected electricity-price sensor in SEK/kWh. It updates with that sensor and does not show a time interval.
+
 ## Setup
 
 1. Add this repository in Tessera's **Plugins** page and install it on a screen with PSRAM.
-2. In the plugin's **On this screen** settings, select the five Home Assistant power sensors (Solar, Battery, Grid, Home and Car), then save and build the screen.
+2. In the plugin's **On this screen** settings, select a current price sensor and the five Home Assistant power sensors (Solar, Battery, Grid, Home and Car), then save and build the screen. The price sensor should report a numeric value in SEK/kWh, for example Nord Pool's current price sensor.
 3. Add **Energy flow** to the layout. Choose **3 × 2** or **3 × 3** cells.
 
 The plugin uses screen-level entity inputs to work with Tessera versions whose manifest validator does not support per-tile entity options. The selected entities are read in watts and displayed in kW. The car sensor should report positive power while charging. For grid power, positive means import and negative means export. For battery power, positive means discharge and negative means charge.
