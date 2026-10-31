@@ -13,6 +13,8 @@ using tessera::Font;
 namespace ui = tessera::ui;
 
 constexpr int SERIES = 5;
+constexpr int PRICE_SERIES = SERIES;
+constexpr int HISTORY_SERIES = SERIES + 1;
 constexpr int FLOWS = 7;
 constexpr int MAX_POINTS = 300;  // 25 hours on the day clocks go back, sampled every five minutes
 constexpr uint32_t SAMPLE_SECONDS = 300;
@@ -20,7 +22,8 @@ constexpr uint32_t CHUNK_SECONDS = 6 * 3600;
 
 struct FlowData {
   tessera::List<float> values[SERIES];
-  char entity[SERIES][64]{};
+  tessera::List<float> price_values;
+  char entity[HISTORY_SERIES][64]{};
   char name[SERIES][40]{};
   char unit[SERIES][12]{};
   float current[SERIES]{};  // kW
@@ -43,6 +46,8 @@ struct FlowData {
       series.resize(MAX_POINTS);
       for (int i = 0; i < MAX_POINTS; i++) series[i] = NAN;
     }
+    price_values.resize(MAX_POINTS);
+    for (int i = 0; i < MAX_POINTS; i++) price_values[i] = NAN;
   }
 };
 
@@ -105,11 +110,12 @@ void SigenFlow::configure(uint32_t epoch) {
   for (int s = 0; s < SERIES; s++) {
     for (int i = 0; i < MAX_POINTS; i++) flow_->values[s][i] = NAN;
   }
+  for (int i = 0; i < MAX_POINTS; i++) flow_->price_values[i] = NAN;
   request_id_ = 0;
   job_ = 0;
   const uint32_t complete_until = std::min<uint32_t>(end, epoch - epoch % SAMPLE_SECONDS);
   const uint8_t chunks = static_cast<uint8_t>((end - start + CHUNK_SECONDS - 1) / CHUNK_SECONDS);
-  jobs_ = chunks * SERIES;
+  jobs_ = chunks * HISTORY_SERIES;
   history_until_ = complete_until;
   flow_->generation++;
   request_next();
@@ -149,8 +155,15 @@ void SigenFlow::update_unit(uint8_t series, const char *unit) {
   flow_->generation++;
 }
 
-void SigenFlow::update_price(float value) {
+void SigenFlow::update_price(float value, const char *entity, uint32_t epoch) {
   if (!flow_) return;
+  if (entity && std::strcmp(flow_->entity[PRICE_SERIES], entity) != 0) {
+    std::snprintf(flow_->entity[PRICE_SERIES], sizeof(flow_->entity[PRICE_SERIES]), "%s", entity);
+    flow_->day_start = 0;
+    configure(epoch);
+  } else {
+    configure(epoch);
+  }
   flow_->price = value;
   flow_->price_ok = std::isfinite(value);
   flow_->generation++;
@@ -212,7 +225,8 @@ void SigenFlow::on_message(JsonObjectConst message) {
       if (slot < 0 || slot >= flow_->points) continue;
       float value = 0;
       if (parse_number(values[i], value))
-        flow_->values[request_series_][slot] = to_kw(value, flow_->unit[request_series_]);
+      if (request_series_ == PRICE_SERIES) flow_->price_values[slot] = value;
+      else flow_->values[request_series_][slot] = to_kw(value, flow_->unit[request_series_]);
     }
   } else {
     flow_->history_error = true;
@@ -259,29 +273,17 @@ class TodayTile : public tessera::Tile {
     height_ = c.height;
     compact_layout_ = width_ < ui::px(560) || height_ < ui::px(300);
     plugin_->configure(tessera::epoch());
-    price_box_ = lv_obj_create(c.parent);
-    lv_obj_remove_style_all(price_box_);
-    lv_obj_remove_flag(price_box_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(price_box_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(price_box_, width_ * (compact_layout_ ? 65 : 45) / 100, ui::line_height(Font::HEADLINE));
-    lv_obj_set_pos(price_box_, 0, 0);
-    lv_obj_set_style_pad_all(price_box_, 0, 0);
-    lv_obj_set_style_radius(price_box_, ui::px(10), 0);
-    lv_obj_set_style_bg_color(price_box_, lv_color_hex(0x2B261F), 0);
-    lv_obj_set_style_bg_opa(price_box_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(price_box_, std::max(1, ui::px(1)), 0);
-    lv_obj_set_style_border_color(price_box_, lv_color_hex(0x725127), 0);
-    price_ = ui::label(price_box_, Font::BODY, theme::INK);
+    price_ = ui::label(c.parent, compact_layout_ ? Font::BODY : Font::HEADLINE, theme::INK);
     lv_obj_remove_flag(price_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_text_color(price_, lv_color_hex(0xFFC56E), 0);
-    lv_obj_set_size(price_, width_ * (compact_layout_ ? 65 : 45) / 100 - ui::px(12), ui::line_height(Font::HEADLINE));
-    lv_obj_set_pos(price_, ui::px(6), 0);
+    lv_obj_set_style_text_color(price_, lv_color_hex(0xE8EEF2), 0);
+    lv_obj_set_size(price_, width_ * (compact_layout_ ? 67 : 70) / 100, ui::line_height(Font::HEADLINE));
+    lv_obj_set_pos(price_, 0, 0);
     const Font title_font = width_ < ui::px(500) ? Font::BODY : Font::HEADLINE;
     title_ = ui::label(c.parent, title_font, theme::INK);
     lv_obj_remove_flag(title_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(title_, width_ * 27 / 100, ui::line_height(Font::HEADLINE));
     lv_obj_set_pos(title_, width_ * 47 / 100, 0);
-    if (compact_layout_) lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
 
     const int header_h = ui::line_height(Font::HEADLINE);
     const int mode_w = width_ * (compact_layout_ ? 32 : 25) / 100;
@@ -292,7 +294,7 @@ class TodayTile : public tessera::Tile {
     lv_obj_set_size(mode_pill_, mode_w, header_h);
     lv_obj_set_pos(mode_pill_, width_ - mode_w, 0);
     lv_obj_set_style_pad_all(mode_pill_, 0, 0);
-    lv_obj_set_style_bg_color(mode_pill_, lv_color_hex(0x397C68), 0);
+    lv_obj_set_style_bg_color(mode_pill_, lv_color_hex(0x27413D), 0);
     lv_obj_set_style_bg_opa(mode_pill_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mode_pill_, 0, 0);
     lv_obj_set_style_radius(mode_pill_, header_h / 2, 0);
@@ -373,8 +375,18 @@ class TodayTile : public tessera::Tile {
       lv_obj_remove_flag(connectors_[i], LV_OBJ_FLAG_CLICKABLE);
       lv_obj_set_style_line_width(connectors_[i], std::max(1, ui::px(2)), 0);
       lv_obj_set_style_line_color(connectors_[i], lv_color_hex(FLOW_COLORS[i]), 0);
-      connector_points_[i][0] = {centers_[from_node[i]].x, centers_[from_node[i]].y};
-      connector_points_[i][1] = {centers_[to_node[i]].x, centers_[to_node[i]].y};
+      const float dx = static_cast<float>(centers_[to_node[i]].x - centers_[from_node[i]].x);
+      const float dy = static_cast<float>(centers_[to_node[i]].y - centers_[from_node[i]].y);
+      const float length = std::max(1.0f, std::sqrt(dx * dx + dy * dy));
+      const float ux = dx / length, uy = dy / length;
+      const float from_radius = (from_node[i] == NODE_HOME ? home_d_ : outer_d) / 2.0f;
+      const float to_radius = (to_node[i] == NODE_HOME ? home_d_ : outer_d) / 2.0f;
+      connector_points_[i][0] = {
+          static_cast<decltype(connector_points_[i][0].x)>(std::lround(centers_[from_node[i]].x + ux * from_radius)),
+          static_cast<decltype(connector_points_[i][0].y)>(std::lround(centers_[from_node[i]].y + uy * from_radius))};
+      connector_points_[i][1] = {
+          static_cast<decltype(connector_points_[i][1].x)>(std::lround(centers_[to_node[i]].x - ux * to_radius)),
+          static_cast<decltype(connector_points_[i][1].y)>(std::lround(centers_[to_node[i]].y - uy * to_radius))};
       lv_line_set_points(connectors_[i], connector_points_[i], 2);
       dots_[i] = lv_obj_create(c.parent);
       lv_obj_remove_style_all(dots_[i]);
@@ -399,7 +411,8 @@ class TodayTile : public tessera::Tile {
       lv_obj_set_size(circles_[n], d, d);
       lv_obj_set_pos(circles_[n], centers_[n].x - d / 2, centers_[n].y - d / 2);
       lv_obj_set_style_radius(circles_[n], LV_RADIUS_CIRCLE, 0);
-      lv_obj_set_style_bg_opa(circles_[n], LV_OPA_TRANSP, 0);
+      lv_obj_set_style_bg_color(circles_[n], lv_color_hex(0x171B20), 0);
+      lv_obj_set_style_bg_opa(circles_[n], LV_OPA_COVER, 0);
       lv_obj_set_style_border_width(circles_[n], std::max(2, ui::px(2)), 0);
       lv_obj_set_style_border_color(circles_[n], lv_color_hex(NODE_COLORS[n]), 0);
       icon_[n] = ui::label(circles_[n], Font::ICON, theme::INK);
@@ -497,16 +510,38 @@ class TodayTile : public tessera::Tile {
     }
   }
 
+  bool average_price_today(float &average, uint32_t epoch) const {
+    const FlowData &d = plugin_->data();
+    if (!d.day_start || epoch <= d.day_start) return false;
+    const int current_slot = std::clamp<int>((epoch - d.day_start) / SAMPLE_SECONDS, 0, d.points - 1);
+    float sum = 0;
+    int count = 0;
+    for (int i = 0; i < current_slot; i++) {
+      if (!std::isfinite(d.price_values[i])) continue;
+      sum += d.price_values[i];
+      count++;
+    }
+    if (!count) return false;
+    average = sum / count;
+    return true;
+  }
+
   void refresh(uint32_t epoch) {
     const FlowData &d = plugin_->data();
     ui::set_text(title_, plugin_->text("title"));
     ui::set_text(mode_text_, plugin_->text(compact_layout_ ? (daily_ ? "daily_compact" : "live_compact") : (daily_ ? "daily" : "live")));
     char price_text[48];
-    if (compact_layout_) {
-      if (d.price_ok) std::snprintf(price_text, sizeof(price_text), "%.2f SEK/kWh", d.price);
-      else std::snprintf(price_text, sizeof(price_text), "-- SEK/kWh");
-    } else if (d.price_ok) std::snprintf(price_text, sizeof(price_text), "%s %.2f SEK/kWh", plugin_->text("price"), d.price);
-    else std::snprintf(price_text, sizeof(price_text), "%s -- SEK/kWh", plugin_->text("price"));
+    if (daily_) {
+      float average = 0;
+      if (average_price_today(average, epoch))
+        std::snprintf(price_text, sizeof(price_text), compact_layout_ ? "AVG %.2f SEK/kWh" : "AVERAGE TODAY  %.2f SEK/kWh", average);
+      else
+        std::snprintf(price_text, sizeof(price_text), compact_layout_ ? "AVG -- SEK/kWh" : "AVERAGE TODAY  -- SEK/kWh");
+    } else if (d.price_ok) {
+      std::snprintf(price_text, sizeof(price_text), compact_layout_ ? "NOW %.2f SEK/kWh" : "PRICE RIGHT NOW  %.2f SEK/kWh", d.price);
+    } else {
+      std::snprintf(price_text, sizeof(price_text), compact_layout_ ? "NOW -- SEK/kWh" : "PRICE RIGHT NOW  -- SEK/kWh");
+    }
     ui::set_text(price_, price_text);
     const int map_series[SERIES] = {0, 2, 3, 1, 4};
     if (compact_layout_) {
@@ -640,11 +675,9 @@ class TodayTile : public tessera::Tile {
         std::max(0.0f, solar - solar_to_battery), solar_to_battery,
         std::max(0.0f, std::max(0.0f, grid) - grid_to_battery), grid_to_battery,
         discharge, car, std::max(0.0f, -grid)};
-    const int source[FLOWS] = {NODE_SOLAR, NODE_SOLAR, NODE_GRID, NODE_GRID, NODE_BATTERY, NODE_HOME, NODE_HOME};
-    const int dest[FLOWS] = {NODE_HOME, NODE_BATTERY, NODE_HOME, NODE_BATTERY, NODE_HOME, NODE_CAR, NODE_GRID};
     for (int i = 0; i < FLOWS; i++) {
-      const int x0 = centers_[source[i]].x, y0 = centers_[source[i]].y;
-      const int x1 = centers_[dest[i]].x, y1 = centers_[dest[i]].y;
+      const int x0 = connector_points_[i][0].x, y0 = connector_points_[i][0].y;
+      const int x1 = connector_points_[i][1].x, y1 = connector_points_[i][1].y;
       const float phase = std::fmod((epoch % 4) / 4.0f + i * 0.13f, 1.0f);
       const float p = phase;
       lv_obj_set_pos(dots_[i], static_cast<int>(x0 + (x1 - x0) * p) - ui::px(4),
@@ -655,7 +688,7 @@ class TodayTile : public tessera::Tile {
   }
 
   SigenFlow *plugin_;
-  lv_obj_t *title_{}, *price_box_{}, *price_{}, *mode_pill_{}, *mode_text_{}, *status_{}, *compact_status_{};
+  lv_obj_t *title_{}, *price_{}, *mode_pill_{}, *mode_text_{}, *status_{}, *compact_status_{};
   lv_obj_t *circles_[SERIES]{}, *icon_[SERIES]{}, *names_[SERIES]{}, *values_[SERIES]{}, *secondary_[SERIES]{}, *soc_{};
   lv_obj_t *compact_cards_[SERIES]{}, *compact_values_[SERIES]{};
   lv_obj_t *connectors_[FLOWS]{}, *dots_[FLOWS]{};
