@@ -1,5 +1,5 @@
 id: tessa_my_sigen_flow
-version: 0.2.2
+version: 0.2.3
 api: "0.14"
 icon: solar-power
 maintainer: SoMedNinja
@@ -34,6 +34,6 @@ tiles:
   - id: today
     name: tile_today
     icon: solar-power
-    sizes: { min: 2x2, max: 3x3 }
+    sizes: { min: 1x1, max: 3x3 }
     memory: 16000
     example: tile_example
