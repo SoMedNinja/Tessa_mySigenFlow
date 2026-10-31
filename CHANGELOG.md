@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.6
+
+- Stop flow lines at the bubble edges and use solid, clean bubble interiors.
+- Show a plain current-price line in Live mode and today's recorder-based average price in Today mode.
+- Make the Live/Today tap action clearer and refine the header and colors.
+
 ## 0.2.5
 
 - Correct the Sigen battery sensor direction: positive is charging and negative is discharging.
