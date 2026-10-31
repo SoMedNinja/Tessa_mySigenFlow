@@ -10,7 +10,7 @@ A native Tessera energy-flow tile inspired by Home Assistant's Energy view and t
 
 Tap anywhere on the tile to switch between **Live** power in kW and **Today** totals in kWh. In daily mode, grid import/export and battery charge/discharge are shown separately.
 
-The upper-left price badge shows the current value from a selected electricity-price sensor in SEK/kWh. It updates with that sensor and does not show a time interval.
+The upper-left plain-text price line shows the current value in Live mode and the average price so far today in Today mode. Both use the selected electricity-price sensor in SEK/kWh.
 
 ## Setup
 
@@ -26,7 +26,7 @@ The diagram includes paths from solar and grid to the battery. The selected sens
 
 Daily energy is integrated from Home Assistant's five-minute mean power statistics: mean kW × interval hours. The current five-minute slot is weighted by the elapsed portion of the slot. Home Assistant restores recorder history after a screen restart, so totals do not depend on a buffer stored only on the ESP.
 
-The selected power sensors need Home Assistant recorder statistics (normally long-term statistics for power sensors with `state_class: measurement` and unit W or kW). If statistics are missing, the tile reports that history is unavailable and keeps displaying live power when the sensors are available.
+The selected power sensors need Home Assistant recorder statistics (normally long-term statistics for power sensors with `state_class: measurement` and unit W or kW). The Today view averages the selected price sensor's recorded five-minute means from midnight to the present; if those price statistics are missing, it shows `AVG --`. If power statistics are missing, the tile reports that history is unavailable and keeps displaying live power when the sensors are available.
 
 ## Device and memory
 
@@ -34,4 +34,4 @@ The plugin is native C++ built into the ESPHome firmware. It draws with Tessera'
 
 ## Permissions and privacy
 
-The screen reads the price, five power and battery charge entities selected in this plugin's settings. It asks Home Assistant for `recorder/statistics_during_period` for only the five power entities, in today's local-day window and six-hour chunks. No data is sent to an external server.
+The screen reads the price, five power and battery charge entities selected in this plugin's settings. It asks Home Assistant for `recorder/statistics_during_period` for the five power entities and price sensor, in today's local-day window and six-hour chunks. No data is sent to an external server.
