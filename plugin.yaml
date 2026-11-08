@@ -1,6 +1,6 @@
 # Entity inputs are screen-level settings on Tessera versions before per-tile entity options.
-# Safe fallback lets existing screens build before the new optional SoC input is selected.
-defaults: { BATTERY_SOC_ENTITY: sensor.unconfigured_battery_soc }
+# Safe fallbacks let existing screens build before new entity inputs are selected.
+defaults: { BATTERY_SOC_ENTITY: sensor.unconfigured_battery_soc, HEAT_PUMP_ENTITY: sensor.unconfigured_heat_pump_power }
 tessa_my_sigen_flow:
   id: sigen_flow
 
@@ -28,7 +28,7 @@ sensor:
     internal: true
     on_value:
       - lambda: |-
-          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          const char *entities[6] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}", "${HEAT_PUMP_ENTITY}"};
           id(sigen_flow).update_sensor(0, x, entities, tessera::epoch());
   - platform: homeassistant
     id: sigen_battery_power
@@ -37,7 +37,7 @@ sensor:
     internal: true
     on_value:
       - lambda: |-
-          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          const char *entities[6] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}", "${HEAT_PUMP_ENTITY}"};
           id(sigen_flow).update_sensor(1, x, entities, tessera::epoch());
   - platform: homeassistant
     id: sigen_grid_power
@@ -46,7 +46,7 @@ sensor:
     internal: true
     on_value:
       - lambda: |-
-          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          const char *entities[6] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}", "${HEAT_PUMP_ENTITY}"};
           id(sigen_flow).update_sensor(2, x, entities, tessera::epoch());
   - platform: homeassistant
     id: sigen_home_power
@@ -55,7 +55,7 @@ sensor:
     internal: true
     on_value:
       - lambda: |-
-          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          const char *entities[6] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}", "${HEAT_PUMP_ENTITY}"};
           id(sigen_flow).update_sensor(3, x, entities, tessera::epoch());
   - platform: homeassistant
     id: sigen_car_power
@@ -64,8 +64,18 @@ sensor:
     internal: true
     on_value:
       - lambda: |-
-          const char *entities[5] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}"};
+          const char *entities[6] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}", "${HEAT_PUMP_ENTITY}"};
           id(sigen_flow).update_sensor(4, x, entities, tessera::epoch());
+
+  - platform: homeassistant
+    id: sigen_heat_pump_power
+    entity_id: ${HEAT_PUMP_ENTITY}
+    unit_of_measurement: W
+    internal: true
+    on_value:
+      - lambda: |-
+          const char *entities[6] = {"${SOLAR_ENTITY}", "${BATTERY_ENTITY}", "${GRID_ENTITY}", "${HOME_ENTITY}", "${CAR_ENTITY}", "${HEAT_PUMP_ENTITY}"};
+          id(sigen_flow).update_sensor(5, x, entities, tessera::epoch());
 
 text_sensor:
   - platform: homeassistant
@@ -108,3 +118,11 @@ text_sensor:
     on_value:
       - lambda: |-
           id(sigen_flow).update_unit(4, x.c_str());
+  - platform: homeassistant
+    id: sigen_heat_pump_unit
+    entity_id: ${HEAT_PUMP_ENTITY}
+    attribute: unit_of_measurement
+    internal: true
+    on_value:
+      - lambda: |-
+          id(sigen_flow).update_unit(5, x.c_str());
