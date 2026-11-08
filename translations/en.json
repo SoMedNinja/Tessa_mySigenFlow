@@ -17,6 +17,8 @@
     "home_hint": "Select the home load power sensor, such as Sigen plant Consumed power.",
     "car": "Car charging sensor",
     "car_hint": "Select the EV or DC charger power sensor.",
+    "heat_pump": "Heat pump power sensor",
+    "heat_pump_hint": "Select the Quantum heat pump power sensor, such as Total Effect or Total Efficiency reported in watts.",
     "price": "Current electricity price",
     "price_hint": "Select a numeric price sensor in SEK per kWh, such as Nord Pool Aktuellt pris."
   },
@@ -39,6 +41,7 @@
     "battery": "BATTERY",
     "grid": "GRID",
     "home": "HOME",
-    "car": "CAR"
+    "car": "CAR",
+    "heat_pump": "HEAT PUMP"
   }
 }
