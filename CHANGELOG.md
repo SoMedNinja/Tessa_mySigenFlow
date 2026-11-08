@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.8
+
+- Add a heat-pump sensor selector, live power node and today's energy total.
+- Show the heat pump to the right of the house while keeping the car node.
+
 ## 0.2.7
 
 - Match the bubbles and price text to Tessera's light and dark themes for readable contrast.
