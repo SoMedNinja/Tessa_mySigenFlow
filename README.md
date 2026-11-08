@@ -1,12 +1,13 @@
 # Tessa mySigen Energy
 
-A native Tessera energy-flow tile inspired by Home Assistant's Energy view and the linked Tessera Energy-card design. The dark diagram uses coloured circles, connecting lines and moving dots for:
+A native Tessera energy-flow tile inspired by Home Assistant's Energy view and the linked Tessera Energy-card design. The theme-aware diagram uses colored circles, connecting lines and moving dots for:
 
 - Solar generation
 - Grid import and export
 - Battery state of charge, charge and discharge
 - House consumption
 - Car charging
+- Heat-pump power
 
 Use the top-right **Today view** / **Live view** button to switch between live power in kW and today's totals in kWh. In Today mode, grid import/export and battery charge/discharge are shown separately.
 
@@ -15,7 +16,7 @@ The upper-left plain-text price line shows the current value in Live mode and th
 ## Setup
 
 1. Add this repository in Tessera's **Plugins** page and install it on a screen with PSRAM.
-2. In the plugin's **On this screen** settings, select the current price sensor, five power sensors (Solar, Battery, Grid, Home and Car), and a battery state-of-charge sensor in percent. The price sensor should report a numeric value in SEK/kWh, for example Nord Pool's current price sensor.
+2. In the plugin's **On this screen** settings, select the current price sensor, six power sensors (Solar, Battery, Grid, Home, Car and Heat pump), and a battery state-of-charge sensor in percent. Select the Quantum sensor that reports heat-pump power in watts (for example **Total Effect** or **Total Efficiency**). The price sensor should report a numeric value in SEK/kWh, for example Nord Pool's current price sensor.
 3. Add **Energy flow** to the layout. Resize it from **1 × 1** through **3 × 3** cells. Small tiles switch to compact, colored metric cards; larger tiles show the full flow diagram.
 
 The plugin uses screen-level entity inputs to work with Tessera versions whose manifest validator does not support per-tile entity options. It reads each Home Assistant power sensor's `unit_of_measurement` attribute and converts W, kW or MW to kW. For grid power, positive means import and negative means export. For the Sigen inverter battery-power sensor, positive means charge and negative means discharge. For the home load, use the Sigen plant **Consumed power** sensor; plant active power is not the home-consumption sensor. The battery state-of-charge input is optional at build time, but select it in the screen Plugins settings to show its percentage.
@@ -34,4 +35,4 @@ The plugin is native C++ built into the ESPHome firmware. It draws with Tessera'
 
 ## Permissions and privacy
 
-The screen reads the price, five power and battery charge entities selected in this plugin's settings. It asks Home Assistant for `recorder/statistics_during_period` for the five power entities and price sensor, in today's local-day window and six-hour chunks. No data is sent to an external server.
+The screen reads the price, six power and battery charge entities selected in this plugin's settings. It asks Home Assistant for `recorder/statistics_during_period` for the six power entities and price sensor, in today's local-day window and six-hour chunks. No data is sent to an external server.
